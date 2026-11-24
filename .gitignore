@@ -1,0 +1,31 @@
+# Unreal Engine 5.9 build & cache directories
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+Build/
+
+# IDE & project files
+.vs/
+.vscode/
+.idea/
+*.xcworkspace/
+*.xcodeproj/
+*.sln
+*.suo
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb
+compile_commands.json
+
+# macOS / OS artifacts
+.DS_Store
+._*
+Thumbs.db
+
+# Unreal user-local content
+Content/Developers/
+Content/Collections/
+*.log
+*.tmp
