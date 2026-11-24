@@ -43,7 +43,7 @@ AWaxMonsterBase::AWaxMonsterBase()
 	ShellCollection->SetCollisionProfileName(TEXT("PhysicsActor"));
 	ShellCollection->SetCollisionObjectType(ECC_PhysicsBody);
 	ShellCollection->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
-	ShellCollection->bAllowRemovalOnSleep = true;
+	ShellCollection->bAllowRemovalOnSleep = false;
 	ShellCollection->bAllowRemovalOnBreak = true;
 
 	CoreMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CoreMesh"));
@@ -66,8 +66,8 @@ AWaxMonsterBase::AWaxMonsterBase()
 		EyeGC->SetCollisionObjectType(ECC_PhysicsBody);
 		EyeGC->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 		EyeGC->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
-		EyeGC->bAllowRemovalOnSleep = true;
-		EyeGC->bAllowRemovalOnBreak = false;
+		EyeGC->bAllowRemovalOnSleep = false;
+		EyeGC->bAllowRemovalOnBreak = true;
 		EyeGC->SetCastShadow(false);
 		EyeGC->SetReceivesDecals(false);
 		return EyeGC;
@@ -172,8 +172,8 @@ void AWaxMonsterBase::ConfigureEyeCollection(UGeometryCollectionComponent* EyeGC
 		EyeGC->SetCollisionObjectType(ECC_PhysicsBody);
 		EyeGC->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 		EyeGC->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
-		EyeGC->bAllowRemovalOnSleep = true;
-		EyeGC->bAllowRemovalOnBreak = false;
+		EyeGC->bAllowRemovalOnSleep = false;
+		EyeGC->bAllowRemovalOnBreak = true;
 		EyeGC->SetSimulatePhysics(true);
 		EyeGC->SetNotifyBreaks(true);
 

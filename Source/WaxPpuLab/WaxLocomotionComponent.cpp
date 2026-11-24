@@ -407,7 +407,11 @@ void UWaxButterLocomotionComponent::TickHopAlign(float DeltaTime)
 
 	const float CurrentYaw = OwnerMonster->GetActorRotation().Yaw;
 	const float DesiredYaw = DirToPlayer.Rotation().Yaw;
-	const float DeltaYaw = FMath::FindDeltaAngleDegrees(CurrentYaw, DesiredYaw);
+	const float DeltaFwd = FMath::FindDeltaAngleDegrees(CurrentYaw, DesiredYaw);
+	const float DeltaBack = FMath::FindDeltaAngleDegrees(CurrentYaw, DesiredYaw + 180.0f);
+
+	const bool bUseBackFace = FMath::Abs(DeltaBack) < FMath::Abs(DeltaFwd);
+	const float DeltaYaw = bUseBackFace ? DeltaBack : DeltaFwd;
 
 	StateElapsed += DeltaTime;
 
@@ -420,6 +424,7 @@ void UWaxButterLocomotionComponent::TickHopAlign(float DeltaTime)
 			const float ChargeThreshold = FMath::Max(OwnerMonster->StopDistanceToPlayer, MinChargeStartDistance);
 			if (FMath::Abs(DeltaYaw) <= AlignToleranceDeg && DistToPlayer > ChargeThreshold)
 			{
+				TumbleDirectionSign = bUseBackFace ? -1.0f : 1.0f;
 				EnterState(EWaxButterLocoState::LayDown);
 				return;
 			}
@@ -511,7 +516,7 @@ void UWaxButterLocomotionComponent::TickTumbleCharge(float DeltaTime)
 	const float NextForward = W0 * (1.0f - FMath::Cos(NextTheta)) + H0 * FMath::Sin(NextTheta);
 	const float DeltaForward = NextForward - PrevStepForward;
 
-	const FVector ChargeDir = OwnerMonster->GetActorForwardVector().GetSafeNormal2D();
+	const FVector ChargeDir = OwnerMonster->GetActorForwardVector().GetSafeNormal2D() * TumbleDirectionSign;
 	const FVector BeforeLoc = OwnerMonster->GetActorLocation();
 	if (DeltaForward > KINDA_SMALL_NUMBER)
 	{
@@ -519,7 +524,6 @@ void UWaxButterLocomotionComponent::TickTumbleCharge(float DeltaTime)
 	}
 	const float ActualForward = FVector::DotProduct(OwnerMonster->GetActorLocation() - BeforeLoc, ChargeDir);
 
-	// Detect wall blockage to avoid spinning in place
 	if (DeltaForward > 2.0f && ActualForward < DeltaForward * 0.45f)
 	{
 		EnterState(EWaxButterLocoState::StandUp);
@@ -531,7 +535,7 @@ void UWaxButterLocomotionComponent::TickTumbleCharge(float DeltaTime)
 
 	const float CenterZ = W0 * FMath::Sin(TumbleTheta) + H0 * FMath::Cos(TumbleTheta);
 	const float CapHalfH = OwnerMonster->GetCapsuleComponent() ? OwnerMonster->GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight() : HalfY;
-	const float TotalTumbleAngle = static_cast<float>(TumbleStepIndex) * (PI * 0.5f) + TumbleTheta;
+	const float TotalTumbleAngle = TumbleDirectionSign * (static_cast<float>(TumbleStepIndex) * (PI * 0.5f) + TumbleTheta);
 
 	BodyPivot->SetRelativeLocation(FVector(0.0f, 0.0f, CenterZ - CapHalfH));
 	BodyPivot->SetRelativeRotation(ComputeLaidRelQuat(1.0f, TotalTumbleAngle));
@@ -552,9 +556,9 @@ void UWaxButterLocomotionComponent::TickTumbleCharge(float DeltaTime)
 			return;
 		}
 
-		const float CurrentYaw = OwnerMonster->GetActorRotation().Yaw;
+		const float ChargeYaw = ChargeDir.Rotation().Yaw;
 		const float DesiredYaw = DirToPlayer.Rotation().Yaw;
-		const float DeltaYaw = FMath::FindDeltaAngleDegrees(CurrentYaw, DesiredYaw);
+		const float DeltaYaw = FMath::FindDeltaAngleDegrees(ChargeYaw, DesiredYaw);
 		if (FMath::Abs(DeltaYaw) > AbortAngleDeg)
 		{
 			EnterState(EWaxButterLocoState::StandUp);
@@ -586,7 +590,7 @@ void UWaxButterLocomotionComponent::TickStandUp(float DeltaTime)
 
 	const float CapHalfH = OwnerMonster->GetCapsuleComponent() ? OwnerMonster->GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight() : HalfZ;
 	const float UnwoundTheta = FMath::Lerp(StandStartTheta, 0.0f, SmoothT);
-	const float TotalTumbleAngle = static_cast<float>(TumbleStepIndex) * (PI * 0.5f) + UnwoundTheta;
+	const float TotalTumbleAngle = TumbleDirectionSign * (static_cast<float>(TumbleStepIndex) * (PI * 0.5f) + UnwoundTheta);
 
 	BodyPivot->SetRelativeLocation(FVector(0.0f, 0.0f, CenterZ - CapHalfH));
 	const FQuat UnwindQuat(FVector::ForwardVector, -LaySign * (PI * 0.5f) * SmoothT);

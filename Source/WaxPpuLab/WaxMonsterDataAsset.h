@@ -12,6 +12,27 @@ class UStaticMesh;
 class UWaxLocomotionComponent;
 
 USTRUCT(BlueprintType)
+struct FWaxCollisionVariant
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio")
+	TObjectPtr<USoundBase> Sound = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio", meta = (ClampMin = "0.0", ClampMax = "2.0"))
+	float MasterIntensity = 0.9f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio", meta = (ClampMin = "0.0", ClampMax = "2.5"))
+	float CrackleGain = 1.15f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio", meta = (ClampMin = "0.0", ClampMax = "2.5"))
+	float SnapGain = 0.72f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio", meta = (ClampMin = "0.0", ClampMax = "2.5"))
+	float BodyGain = 0.14f;
+};
+
+USTRUCT(BlueprintType)
 struct FWaxAudioProfile
 {
 	GENERATED_BODY()
@@ -21,6 +42,9 @@ struct FWaxAudioProfile
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio")
 	TObjectPtr<USoundBase> CrackSound = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio")
+	TArray<FWaxCollisionVariant> CollisionVariants;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio", meta = (ClampMin = "0.0", ClampMax = "2.0"))
 	float MasterIntensity = 0.9f;
@@ -101,16 +125,16 @@ struct FWaxButterLocomotionSettings
 	float StandUpDuration = 0.45f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tumble", meta = (ClampMin = "100.0"))
-	float EffectiveGravity = 2600.0f;
+	float EffectiveGravity = 1350.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tumble", meta = (ClampMin = "1.0"))
-	float DriveAngularAccel = 26.0f;
+	float DriveAngularAccel = 13.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tumble", meta = (ClampMin = "0.5"))
-	float InitialStepOmega = 4.2f;
+	float InitialStepOmega = 2.6f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tumble", meta = (ClampMin = "0.1", ClampMax = "1.0"))
-	float StepBounceRetention = 0.84f;
+	float StepBounceRetention = 0.78f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tumble", meta = (ClampMin = "1"))
 	int32 MaxTumbleSteps = 10;

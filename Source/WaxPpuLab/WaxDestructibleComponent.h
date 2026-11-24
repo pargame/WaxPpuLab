@@ -88,7 +88,7 @@ public:
 	int32 CollapseMaxQueuedGrains = 24;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxDestructible|Audio")
-	float CollisionSoundSpeedThreshold = 45.0f;
+	float CollisionSoundSpeedThreshold = 65.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxDestructible|Audio")
 	float MinCollisionAudioInterval = 0.020f;
@@ -100,13 +100,13 @@ public:
 	float CollisionSpatialCooldownSec = 0.08f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxDestructible|Audio", meta = (ClampMin = "0.0", ClampMax = "2.0"))
-	float CollisionCrackleScale = 0.25f;
+	float CollisionCrackleScale = 1.00f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxDestructible|Audio", meta = (ClampMin = "0.0", ClampMax = "2.0"))
-	float CollisionSnapScale = 1.15f;
+	float CollisionSnapScale = 1.00f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxDestructible|Audio", meta = (ClampMin = "0.0", ClampMax = "2.0"))
-	float CollisionBodyScale = 0.35f;
+	float CollisionBodyScale = 1.00f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxDestructible|Collapse")
 	bool bAllowKickAfterCollapse = false;

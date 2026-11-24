@@ -53,7 +53,7 @@ void UWaxDestructibleComponent::InitializeWithCollection(UGeometryCollectionComp
 
 	ShellCollection->SetSimulatePhysics(true);
 	ShellCollection->SetCustomPrimitiveDataFloat(0, 0.0f);
-	ShellCollection->bAllowRemovalOnSleep = true;
+	ShellCollection->bAllowRemovalOnSleep = false;
 	ShellCollection->bAllowRemovalOnBreak = true;
 	ShellCollection->bNotifyCollisions = true;
 	ShellCollection->SetNotifyRigidBodyCollision(true);
@@ -336,10 +336,12 @@ void UWaxDestructibleComponent::HandleChaosBreakEvent(const FChaosBreakEvent& Br
 			}
 		}
 
+		const float QueueDensityScale = 1.0f / FMath::Pow(static_cast<float>(FMath::Max(1, PendingGrains.Num() + 1)), 0.22f);
+
 		FWaxDestructibleGrain Grain;
 		Grain.FireTime = Now + Delay;
 		Grain.Location = BreakEvent.Location;
-		Grain.Intensity = FMath::Clamp(0.35f + 0.55f * FMath::Max(MassAlpha, SpeedAlpha), 0.25f, 1.0f) * FMath::FRandRange(0.85f, 1.1f) * DelayIntensityScale;
+		Grain.Intensity = FMath::Clamp(0.35f + 0.50f * FMath::Max(MassAlpha, SpeedAlpha), 0.25f, 0.90f) * FMath::FRandRange(0.85f, 1.08f) * DelayIntensityScale * QueueDensityScale;
 		Grain.CutoffHz = FMath::Lerp(13500.0f, 4200.0f, MassAlpha) + FMath::FRandRange(-900.0f, 900.0f);
 		Grain.DecaySec = FMath::Lerp(0.075f, 0.22f, MassAlpha) * FMath::FRandRange(0.85f, 1.15f);
 		Grain.PitchOffset = FMath::Lerp(2.8f, -2.4f, MassAlpha) + FMath::FRandRange(-0.9f, 0.9f);
@@ -409,15 +411,45 @@ void UWaxDestructibleComponent::HandleChaosCollisionEvent(const FChaosPhysicsCol
 
 	RecentCollisionTimes.RemoveAllSwap([Now](double T) { return (Now - T) > 0.12; });
 	RecentCollisionTimes.Add(Now);
-	const float DensityGain = 1.0f / FMath::Sqrt(static_cast<float>(FMath::Max(1, RecentCollisionTimes.Num())));
+	const float DensityGain = FMath::Max(0.65f, 1.0f / FMath::Pow(static_cast<float>(FMath::Max(1, RecentCollisionTimes.Num())), 0.35f));
 
-	const float SpeedAlpha = FMath::Clamp((NormalSpeed - CollisionSoundSpeedThreshold) / 320.0f, 0.0f, 1.0f);
-	const float Intensity = FMath::Lerp(0.18f, 0.68f, SpeedAlpha) * FMath::FRandRange(0.82f, 1.15f) * DensityGain;
-	const float CutoffHz = FMath::Lerp(4800.0f, 13800.0f, SpeedAlpha) + FMath::FRandRange(-700.0f, 700.0f);
-	const float DecaySec = FMath::Lerp(0.028f, 0.075f, SpeedAlpha) * FMath::FRandRange(0.85f, 1.15f);
-	const float PitchOffset = FMath::Lerp(3.8f, 0.5f, SpeedAlpha) + FMath::FRandRange(-1.2f, 1.2f);
+	const float Mass = FMath::Max(0.2f, CollisionInfo.Mass);
+	const float MassAlpha = FMath::Clamp(Mass / 8.0f, 0.0f, 1.0f);
+	const float ImpulseMag = CollisionInfo.AccumulatedImpulse.Size();
+	const float ImpactEnergy = (ImpulseMag > KINDA_SMALL_NUMBER)
+		? (0.5f * ImpulseMag * NormalSpeed)
+		: (0.5f * Mass * NormalSpeed * NormalSpeed);
+	const float Pressure = FMath::Sqrt(FMath::Max(0.0f, ImpactEnergy));
+	const float NormPressure = FMath::Clamp((Pressure - 40.0f) / 700.0f, 0.0f, 1.5f);
+	const float LoudnessAlpha = FMath::Clamp(FMath::Loge(1.0f + 5.0f * NormPressure) / FMath::Loge(6.0f), 0.0f, 1.0f);
+
+	const float Intensity = FMath::Lerp(0.06f, 0.36f, LoudnessAlpha) * FMath::FRandRange(0.88f, 1.10f) * DensityGain;
+	const float CutoffHz = FMath::Lerp(13500.0f, 4200.0f, MassAlpha) + FMath::FRandRange(-900.0f, 900.0f);
+	const float DecaySec = FMath::Lerp(0.075f, 0.22f, MassAlpha) * FMath::FRandRange(0.85f, 1.15f);
+	const float PitchOffset = FMath::Lerp(2.8f, -2.4f, MassAlpha) + FMath::FRandRange(-0.9f, 0.9f);
 
 	FWaxAudioProfile ColProfile = ResolveAudioProfileAt(CollisionInfo.Location);
+	if (ColProfile.CollisionVariants.Num() > 0)
+	{
+		TArray<int32, TInlineAllocator<8>> ValidIndices;
+		for (int32 i = 0; i < ColProfile.CollisionVariants.Num(); ++i)
+		{
+			if (ColProfile.CollisionVariants[i].Sound)
+			{
+				ValidIndices.Add(i);
+			}
+		}
+		if (ValidIndices.Num() > 0)
+		{
+			const FWaxCollisionVariant& Chosen = ColProfile.CollisionVariants[ValidIndices[FMath::RandRange(0, ValidIndices.Num() - 1)]];
+			ColProfile.CrackSound = Chosen.Sound;
+			ColProfile.MasterIntensity = Chosen.MasterIntensity;
+			ColProfile.CrackleGain = Chosen.CrackleGain;
+			ColProfile.SnapGain = Chosen.SnapGain;
+			ColProfile.BodyGain = Chosen.BodyGain;
+		}
+	}
+
 	ColProfile.CrackleGain *= CollisionCrackleScale;
 	ColProfile.SnapGain *= CollisionSnapScale;
 	ColProfile.BodyGain *= CollisionBodyScale;
@@ -483,10 +515,13 @@ void UWaxDestructibleComponent::PlayOneShotCrack(const FVector& Location, float 
 	AudioComp->SetWorldLocation(Location);
 	AudioComp->RegisterComponent();
 
-	AudioComp->SetFloatParameter(TEXT("Intensity"), FMath::Clamp(Intensity * Profile.MasterIntensity, 0.08f, 1.5f));
+	const float FinalIntensity = FMath::Clamp(Intensity * Profile.MasterIntensity, 0.02f, 1.5f);
+	const float FinalPitchOffset = FMath::Clamp(PitchOffset, -6.0f, 6.0f);
+
+	AudioComp->SetFloatParameter(TEXT("Intensity"), FinalIntensity);
 	AudioComp->SetFloatParameter(TEXT("CutoffHz"), FMath::Clamp(CutoffHz, 2400.0f, 16000.0f));
 	AudioComp->SetFloatParameter(TEXT("DecaySec"), FMath::Clamp(DecaySec, 0.025f, 0.28f));
-	AudioComp->SetFloatParameter(TEXT("PitchOffset"), FMath::Clamp(PitchOffset, -6.0f, 6.0f));
+	AudioComp->SetFloatParameter(TEXT("PitchOffset"), FinalPitchOffset);
 	AudioComp->SetFloatParameter(TEXT("CrackleGain"), Profile.CrackleGain);
 	AudioComp->SetFloatParameter(TEXT("SnapGain"), Profile.SnapGain);
 	AudioComp->SetFloatParameter(TEXT("BodyGain"), Profile.BodyGain);

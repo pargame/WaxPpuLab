@@ -168,6 +168,7 @@ private:
 	float PrevLayLateral = 0.0f;
 
 	int32 TumbleStepIndex = 0;
+	float TumbleDirectionSign = 1.0f;
 	float TumbleTheta = 0.0f;
 	float TumbleOmega = 0.0f;
 	float PrevStepForward = 0.0f;

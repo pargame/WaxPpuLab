@@ -10,7 +10,7 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + ASMR 오디오 기�
 | `SpaceBar` / 좌클릭 | 왁스 및 눈알 깎기(홀드 연타 지원) |
 | `Q` / `E` | 소환할 몬스터 전환 (`BP_WaxBall_Basic` ↔ `BP_WaxButter`) |
 | `R` | 현재 선택 몬스터 플레이어 앞 소환 |
-| `1` ~ `9`, `0` | 개발용 ASMR 파괴 사운드 프리셋 전환 (10종) |
+| `1` / `2` | 개발용 ASMR 사운드 버전 전환 (`1`: WoodPlank + Heavy/Bamboo 랜덤 충돌 [기본], `2`: HardBlock + Jade/SoftWax 랜덤 충돌) |
 
 ## 몬스터 아키텍처
 
@@ -33,7 +33,7 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + ASMR 오디오 기�
 
 > **팁 (여러 몬스터 일괄 비교·수정)**: 콘텐츠 브라우저에서 `DA_WaxBall_Basic`, `DA_WaxButter`를 함께 선택 → 우클릭 → **Asset Actions → Edit Selection in Property Matrix**로 열면 표 형태로 한 번에 수정할 수 있습니다.
 
-### 1. 몬스터별 스펙 — DataAsset (`/Game/Demo/Data/DA_WaxBall_Basic`, `DA_WaxButter`)
+### 1. 몬스터별 스펙 — DataAsset (`/Game/WaxPpu/Data/DA_WaxBall_Basic`, `DA_WaxButter`)
 
 | 카테고리 | 주요 파라미터 | 설명 |
 |---|---|---|
@@ -50,7 +50,7 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + ASMR 오디오 기�
 > - 버터의 구르기 속도·기둥 높이는 반드시 **`ButterLocomotion`** (`EffectiveGravity`, `DriveAngularAccel`, `InitialStepOmega`, `HalfX/Y/Z`)에서 수정하세요.
 > - `StopDistanceToPlayer`는 버터에서도 구르기 종료 및 최소 돌진 기준(`Max(StopDistanceToPlayer, MinChargeStartDistance)`)에 정상 반영됩니다.
 
-### 2. 공통 몬스터 BP — `/Game/Demo/Blueprints/BP_WaxBall_Basic`, `BP_WaxButter`
+### 2. 공통 몬스터 BP — `/Game/WaxPpu/Blueprints/BP_WaxBall_Basic`, `BP_WaxButter`
 
 - **루트(`AWaxMonsterBase`) 디테일**:
   - `MonsterData`: 참조할 DataAsset 연결
