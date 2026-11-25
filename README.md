@@ -134,3 +134,7 @@ export DEVELOPER_DIR="/Applications/Xcode-26.1.1.app/Contents/Developer"
 ```
 
 > **Git 협업 주의**: 이 저장소는 Git LFS 없이 `.uasset` 바이너리를 직접 추적합니다. 동일 `.uasset`의 동시 편집을 피하세요. `Content/Collections/`, `Content/Developers/`는 `.gitignore`로 제외되어 있습니다.
+
+## 라이선스
+
+이 저장소의 코드와 직접 제작한 에셋은 [MIT License](LICENSE)를 따릅니다. Unreal Engine 엔진과 Epic Games가 제공한 콘텐츠는 이 라이선스에 포함되지 않으며 [Unreal Engine EULA](https://www.unrealengine.com/eula)를 따릅니다.
