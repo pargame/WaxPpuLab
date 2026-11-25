@@ -29,7 +29,3 @@ Content/Developers/
 Content/Collections/
 *.log
 *.tmp
-
-# AI agent & internal working docs (local only)
-AGENTS.md
-CLAUDE.md
