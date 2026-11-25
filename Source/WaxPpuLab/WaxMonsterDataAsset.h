@@ -155,6 +155,9 @@ class WAXPPULAB_API UWaxMonsterDataAsset : public UPrimaryDataAsset
 	GENERATED_BODY()
 
 public:
+	/** 스폰 시 지면 기준 반높이(cm). Butter 이동이면 ButterLocomotion.HalfZ, 그 외에는 CapsuleHalfHeight를 사용한다. */
+	float GetSpawnHalfHeight() const;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
 	TObjectPtr<UGeometryCollection> ShellCollectionAsset = nullptr;
 

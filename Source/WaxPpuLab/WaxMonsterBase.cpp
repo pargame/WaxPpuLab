@@ -279,6 +279,16 @@ void AWaxMonsterBase::Tick(float DeltaTime)
 	}
 }
 
+void AWaxMonsterBase::ReceiveWaxImpact(const FVector& WorldImpactPoint, float BaseStrain, float Radius)
+{
+	ApplyEyeImpact(WorldImpactPoint, BaseStrain, Radius);
+
+	if (WaxDestructible && !WaxDestructible->HasCollapsed())
+	{
+		WaxDestructible->ApplyWaxImpact(WorldImpactPoint, BaseStrain, Radius);
+	}
+}
+
 void AWaxMonsterBase::ApplyEyeImpact(const FVector& WorldImpactPoint, float BaseStrain, float Radius)
 {
 	if (MonsterState != EWaxMonsterState::Active || Radius <= 0.0f)

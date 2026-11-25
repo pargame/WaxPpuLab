@@ -39,6 +39,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "WaxMonster")
 	void InitializeFromData(UWaxMonsterDataAsset* InData);
 
+	/** 몬스터 피격 단일 진입점. 눈알과 몸체(WaxDestructible)로 충격을 분배한다. */
+	UFUNCTION(BlueprintCallable, Category = "WaxMonster")
+	void ReceiveWaxImpact(const FVector& WorldImpactPoint, float BaseStrain, float Radius);
+
 	UFUNCTION(BlueprintCallable, Category = "WaxMonster|Eyes")
 	void ApplyEyeImpact(const FVector& WorldImpactPoint, float BaseStrain, float Radius);
 

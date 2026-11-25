@@ -2,6 +2,7 @@
 
 #include "WaxPpuLabCharacter.h"
 #include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -15,10 +16,10 @@
 #include "Materials/MaterialParameterCollection.h"
 #include "Materials/MaterialParameterCollectionInstance.h"
 #include "WaxDestructibleComponent.h"
-#include "WaxLocomotionComponent.h"
 #include "WaxMonsterBase.h"
 #include "WaxMonsterDataAsset.h"
 #include "WaxPpuLab.h"
+#include "WaxPpuLabGameMode.h"
 
 AWaxPpuLabCharacter::AWaxPpuLabCharacter()
 {
@@ -35,8 +36,8 @@ AWaxPpuLabCharacter::AWaxPpuLabCharacter()
 
 	// Create the Camera Component	
 	FirstPersonCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("First Person Camera"));
-	FirstPersonCameraComponent->SetupAttachment(FirstPersonMesh, FName("head"));
-	FirstPersonCameraComponent->SetRelativeLocationAndRotation(FVector(-2.8f, 5.89f, 0.0f), FRotator(0.0f, 90.0f, -90.0f));
+	FirstPersonCameraComponent->SetupAttachment(GetCapsuleComponent());
+	FirstPersonCameraComponent->SetRelativeLocationAndRotation(CameraBaseOffset, FRotator::ZeroRotator);
 	FirstPersonCameraComponent->bUsePawnControlRotation = true;
 	FirstPersonCameraComponent->bEnableFirstPersonFieldOfView = true;
 	FirstPersonCameraComponent->bEnableFirstPersonScale = true;
@@ -73,7 +74,7 @@ void AWaxPpuLabCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInput
 		// Wax Actions
 		if (CrackAction)
 		{
-			EnhancedInputComponent->BindAction(CrackAction, ETriggerEvent::Triggered, this, &AWaxPpuLabCharacter::DoWaxCrackTrace);
+			EnhancedInputComponent->BindAction(CrackAction, ETriggerEvent::Triggered, this, &AWaxPpuLabCharacter::RequestPunch);
 		}
 		if (SpawnTestMonsterAction)
 		{
@@ -86,6 +87,10 @@ void AWaxPpuLabCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInput
 		if (SwitchMonsterAction)
 		{
 			EnhancedInputComponent->BindAction(SwitchMonsterAction, ETriggerEvent::Started, this, &AWaxPpuLabCharacter::SwitchMonsterInput);
+		}
+		if (ToggleThirdPersonAction)
+		{
+			EnhancedInputComponent->BindAction(ToggleThirdPersonAction, ETriggerEvent::Started, this, &AWaxPpuLabCharacter::ToggleThirdPersonPreview);
 		}
 	}
 	else
@@ -178,15 +183,6 @@ void AWaxPpuLabCharacter::DoJumpEnd()
 	StopJumping();
 }
 
-FVector AWaxPpuLabCharacter::GetFloatingTargetSphereCenter() const
-{
-	if (!FirstPersonCameraComponent)
-	{
-		return GetActorLocation() + GetActorForwardVector() * WaxTargetForwardDistance;
-	}
-	return FirstPersonCameraComponent->GetComponentLocation() + FirstPersonCameraComponent->GetForwardVector() * WaxTargetForwardDistance;
-}
-
 void AWaxPpuLabCharacter::UpdateDebrisKick()
 {
 	if (!bEnableDebrisKick || !GetWorld())
@@ -232,47 +228,264 @@ void AWaxPpuLabCharacter::UpdateDebrisKick()
 	}
 }
 
+void AWaxPpuLabCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+
+	bHasCachedHeadRef = false;
+	bPunchMarkerActive = false;
+	PunchMarkerExpireTime = -1.0;
+	SmoothedAimPitch = 0.0f;
+	SetPunchMarkerVisible(false);
+
+	if (FirstPersonCameraComponent)
+	{
+		if (FirstPersonCameraComponent->GetAttachParent() != GetCapsuleComponent() || !FirstPersonCameraComponent->GetAttachSocketName().IsNone())
+		{
+			FirstPersonCameraComponent->AttachToComponent(GetCapsuleComponent(), FAttachmentTransformRules::KeepRelativeTransform);
+		}
+		FirstPersonCameraComponent->SetRelativeLocationAndRotation(CameraBaseOffset, FRotator::ZeroRotator);
+	}
+
+	ApplyCameraViewMode();
+}
+
+void AWaxPpuLabCharacter::ToggleThirdPersonPreview()
+{
+	bThirdPersonPreview = !bThirdPersonPreview;
+	ApplyCameraViewMode();
+
+#if !UE_BUILD_SHIPPING
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(9995, 1.8f, FColor::Green,
+			bThirdPersonPreview ? TEXT("[Camera] 3rd Person Preview ON") : TEXT("[Camera] 1st Person"));
+	}
+#endif
+}
+
+void AWaxPpuLabCharacter::ApplyCameraViewMode()
+{
+	if (FirstPersonMesh)
+	{
+		FirstPersonMesh->SetVisibility(!bThirdPersonPreview, true);
+	}
+	if (USkeletalMeshComponent* BodyMesh = GetMesh())
+	{
+		BodyMesh->SetFirstPersonPrimitiveType(bThirdPersonPreview ? EFirstPersonPrimitiveType::None : EFirstPersonPrimitiveType::WorldSpaceRepresentation);
+		BodyMesh->SetOwnerNoSee(!bThirdPersonPreview);
+	}
+}
+
+void AWaxPpuLabCharacter::SetPunchMarkerVisible(bool bVisible, const FVector& ImpactCenter, float Radius)
+{
+	bPunchMarkerActive = bVisible;
+	if (!TargetingMPC || !GetWorld())
+	{
+		return;
+	}
+
+	if (UMaterialParameterCollectionInstance* MPCInst = GetWorld()->GetParameterCollectionInstance(TargetingMPC))
+	{
+		if (bVisible)
+		{
+			MPCInst->SetVectorParameterValue(TEXT("TargetSphereCenter"), FLinearColor(ImpactCenter.X, ImpactCenter.Y, ImpactCenter.Z, 1.0f));
+			MPCInst->SetScalarParameterValue(TEXT("TargetSphereRadius"), Radius);
+			MPCInst->SetVectorParameterValue(TEXT("MarkerColor"), PunchMarkerColor);
+			MPCInst->SetScalarParameterValue(TEXT("EmissiveBoost"), PunchMarkerEmissiveBoost);
+			MPCInst->SetScalarParameterValue(TEXT("MarkerOpacity"), PunchMarkerOpacity);
+			MPCInst->SetScalarParameterValue(TEXT("EdgeSoftness"), PunchMarkerEdgeSoftness);
+		}
+		else
+		{
+			MPCInst->SetScalarParameterValue(TEXT("MarkerOpacity"), 0.0f);
+		}
+	}
+}
+
+void AWaxPpuLabCharacter::UpdatePunchMarker(double Now)
+{
+	if (!bPunchMarkerActive)
+	{
+		return;
+	}
+
+	if (!bShowPunchImpactMarker || Now >= PunchMarkerExpireTime)
+	{
+		SetPunchMarkerVisible(false);
+	}
+}
+
+void AWaxPpuLabCharacter::UpdateFirstPersonCamera(float DeltaTime)
+{
+	if (!FirstPersonCameraComponent)
+	{
+		return;
+	}
+
+	FVector TargetLoc = CameraBaseOffset;
+	if (bThirdPersonPreview)
+	{
+		const FRotator LocalControlRot = (GetControlRotation() - GetActorRotation()).GetNormalized();
+		TargetLoc += LocalControlRot.RotateVector(ThirdPersonPreviewOffset);
+	}
+	else if (HeadFollowAlpha > KINDA_SMALL_NUMBER && FirstPersonMesh && !HeadSocketName.IsNone() && FirstPersonMesh->DoesSocketExist(HeadSocketName))
+	{
+		const FVector HeadWorld = FirstPersonMesh->GetSocketLocation(HeadSocketName);
+		const FVector HeadLocal = GetActorTransform().InverseTransformPosition(HeadWorld);
+		if (!bHasCachedHeadRef)
+		{
+			CachedHeadRefLocal = HeadLocal;
+			bHasCachedHeadRef = true;
+		}
+
+		FVector HeadDelta = (HeadLocal - CachedHeadRefLocal) * HeadFollowAlpha;
+		HeadDelta.X = FMath::Clamp(HeadDelta.X, -MaxHeadForwardOffset, MaxHeadForwardOffset);
+		TargetLoc += HeadDelta;
+	}
+
+	const FVector CurrentLoc = FirstPersonCameraComponent->GetRelativeLocation();
+	const FVector NewLoc = (HeadFollowInterpSpeed > KINDA_SMALL_NUMBER)
+		? FMath::VInterpTo(CurrentLoc, TargetLoc, DeltaTime, HeadFollowInterpSpeed)
+		: TargetLoc;
+	FirstPersonCameraComponent->SetRelativeLocation(NewLoc);
+}
+
+void AWaxPpuLabCharacter::UpdateUpperBodyAimPitch(float DeltaTime)
+{
+	const float RawPitch = FRotator::NormalizeAxis(GetControlRotation().Pitch);
+	const float TargetPitch = bEnableUpperBodyPitch
+		? FMath::Clamp(RawPitch, -MaxUpperBodyPitchDeg, MaxUpperBodyPitchDeg)
+		: 0.0f;
+
+	SmoothedAimPitch = (AimPitchInterpSpeed > KINDA_SMALL_NUMBER)
+		? FMath::FInterpTo(SmoothedAimPitch, TargetPitch, DeltaTime, AimPitchInterpSpeed)
+		: TargetPitch;
+}
+
 void AWaxPpuLabCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	if (FirstPersonCameraComponent && GetWorld())
+	UpdateFirstPersonCamera(DeltaTime);
+	UpdateUpperBodyAimPitch(DeltaTime);
+
+	if (GetWorld())
 	{
-		const FVector SphereCenter = GetFloatingTargetSphereCenter();
-
-		if (TargetingMPC)
-		{
-			if (UMaterialParameterCollectionInstance* MPCInst = GetWorld()->GetParameterCollectionInstance(TargetingMPC))
-			{
-				MPCInst->SetVectorParameterValue(TEXT("TargetSphereCenter"), FLinearColor(SphereCenter.X, SphereCenter.Y, SphereCenter.Z, 1.0f));
-				MPCInst->SetScalarParameterValue(TEXT("TargetSphereRadius"), WaxImpactRadius);
-				MPCInst->SetVectorParameterValue(TEXT("MarkerColor"), TargetDecalColor);
-				MPCInst->SetScalarParameterValue(TEXT("EmissiveBoost"), TargetDecalEmissiveBoost);
-				MPCInst->SetScalarParameterValue(TEXT("MarkerOpacity"), TargetDecalOpacity);
-				MPCInst->SetScalarParameterValue(TEXT("EdgeSoftness"), TargetDecalEdgeSoftness);
-			}
-		}
-
-		if (bShowDebugTargetSphere)
-		{
-			DrawDebugSphere(GetWorld(), SphereCenter, WaxImpactRadius, 20, FColor::Red, false, 0.0f, 0, 1.0f);
-		}
+		UpdatePunchMarker(GetWorld()->GetTimeSeconds());
 	}
 
 	UpdateDebrisKick();
 }
 
-void AWaxPpuLabCharacter::DoWaxCrackTrace()
+void AWaxPpuLabCharacter::RequestPunch()
 {
-	if (!FirstPersonCameraComponent || !GetWorld())
+	UWorld* World = GetWorld();
+	if (!World)
 	{
 		return;
 	}
 
-	const FVector SphereCenter = GetFloatingTargetSphereCenter();
+	if (PunchMontages.Num() == 0)
+	{
+		UE_LOG(LogWaxPpuLab, Warning, TEXT("'%s' RequestPunch skipped: PunchMontages is empty."), *GetNameSafe(this));
+		return;
+	}
+
+	const double Now = World->GetTimeSeconds();
+	if (Now - LastPunchStartTime < static_cast<double>(PunchCooldownSec))
+	{
+		return;
+	}
+
+	USkeletalMeshComponent* AnimMesh = GetMesh();
+	UAnimInstance* AnimInst = AnimMesh ? AnimMesh->GetAnimInstance() : nullptr;
+	if (!AnimInst)
+	{
+		UE_LOG(LogWaxPpuLab, Warning, TEXT("'%s' RequestPunch skipped: AnimInstance is null."), *GetNameSafe(this));
+		return;
+	}
+
+	UAnimMontage* MontageToPlay = PunchMontages[NextPunchIndex % PunchMontages.Num()];
+	NextPunchIndex = (NextPunchIndex + 1) % PunchMontages.Num();
+	if (!MontageToPlay)
+	{
+		UE_LOG(LogWaxPpuLab, Warning, TEXT("'%s' RequestPunch skipped: selected PunchMontage is null."), *GetNameSafe(this));
+		return;
+	}
+
+	if (AnimInst->Montage_Play(MontageToPlay, PunchPlayRate) <= 0.0f)
+	{
+		UE_LOG(LogWaxPpuLab, Warning, TEXT("'%s' RequestPunch skipped: Montage_Play failed for '%s'."), *GetNameSafe(this), *GetNameSafe(MontageToPlay));
+		return;
+	}
+
+	LastPunchStartTime = Now;
+}
+
+void AWaxPpuLabCharacter::HandlePunchImpactNotify(FName ImpactBoneName, float StrainScale, float RadiusScale)
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	USkeletalMeshComponent* SourceMesh = nullptr;
+	if (!ImpactBoneName.IsNone())
+	{
+		if (FirstPersonMesh && FirstPersonMesh->DoesSocketExist(ImpactBoneName))
+		{
+			SourceMesh = FirstPersonMesh;
+		}
+		else if (GetMesh() && GetMesh()->DoesSocketExist(ImpactBoneName))
+		{
+			SourceMesh = GetMesh();
+		}
+	}
+
+	if (!SourceMesh)
+	{
+		UE_LOG(LogWaxPpuLab, Warning, TEXT("'%s' HandlePunchImpactNotify skipped: socket/bone '%s' not found."), *GetNameSafe(this), *ImpactBoneName.ToString());
+		return;
+	}
+
+	const FVector ForwardDir = FirstPersonCameraComponent
+		? FirstPersonCameraComponent->GetForwardVector()
+		: GetActorForwardVector();
+	const FVector ImpactCenter = SourceMesh->GetSocketLocation(ImpactBoneName) + ForwardDir * PunchBoneForwardOffset;
+
+	const float FinalStrain = WaxImpactStrain * FMath::Max(0.1f, StrainScale);
+	const float FinalRadius = WaxImpactRadius * FMath::Max(0.1f, RadiusScale);
+
+	if (bShowPunchImpactMarker)
+	{
+		SetPunchMarkerVisible(true, ImpactCenter, FinalRadius);
+		PunchMarkerExpireTime = World->GetTimeSeconds() + static_cast<double>(PunchMarkerDurationSec);
+	}
+	else if (bPunchMarkerActive)
+	{
+		SetPunchMarkerVisible(false);
+	}
+
+	if (bShowDebugPunchImpact)
+	{
+		DrawDebugSphere(World, ImpactCenter, FinalRadius, 16, PunchMarkerColor.ToFColor(true), false, PunchMarkerDurationSec, 0, 1.5f);
+	}
+
+	ExecuteWaxImpactAtLocation(ImpactCenter, FinalStrain, FinalRadius);
+}
+
+void AWaxPpuLabCharacter::ExecuteWaxImpactAtLocation(const FVector& ImpactCenter, float Strain, float Radius)
+{
+	if (!GetWorld())
+	{
+		return;
+	}
+
 	TArray<FOverlapResult> Overlaps;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(WaxCrackSphere), false, this);
-	if (GetWorld()->OverlapMultiByChannel(Overlaps, SphereCenter, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(WaxImpactRadius), Params))
+	if (GetWorld()->OverlapMultiByChannel(Overlaps, ImpactCenter, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(Radius), Params))
 	{
 		TSet<AActor*> CheckedActors;
 		for (const FOverlapResult& Overlap : Overlaps)
@@ -286,31 +499,28 @@ void AWaxPpuLabCharacter::DoWaxCrackTrace()
 
 			if (AWaxMonsterBase* Monster = Cast<AWaxMonsterBase>(HitActor))
 			{
-				Monster->ApplyEyeImpact(SphereCenter, WaxImpactStrain, WaxImpactRadius);
+				Monster->ReceiveWaxImpact(ImpactCenter, Strain, Radius);
 			}
-
-			if (UWaxDestructibleComponent* Destructible = HitActor->FindComponentByClass<UWaxDestructibleComponent>())
+			else if (UWaxDestructibleComponent* Destructible = HitActor->FindComponentByClass<UWaxDestructibleComponent>())
 			{
 				if (!Destructible->HasCollapsed())
 				{
-					Destructible->ApplyWaxImpact(SphereCenter, WaxImpactStrain, WaxImpactRadius);
+					Destructible->ApplyWaxImpact(ImpactCenter, Strain, Radius);
 				}
 			}
 		}
 	}
 }
 
-namespace
-{
-	int32 GActiveDevAudioPreset = 0;
-}
-
 void AWaxPpuLabCharacter::SetWaxAudioPreset(int32 PresetIndex)
 {
-	GActiveDevAudioPreset = PresetIndex;
 	if (!GetWorld())
 	{
 		return;
+	}
+	if (AWaxPpuLabGameMode* GameMode = GetWorld()->GetAuthGameMode<AWaxPpuLabGameMode>())
+	{
+		GameMode->SetActiveDevAudioPreset(PresetIndex);
 	}
 	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
 	{
@@ -347,14 +557,7 @@ void AWaxPpuLabCharacter::SpawnDemoWaxBallInFront()
 	{
 		if (const UWaxMonsterDataAsset* Data = DefaultMonster->MonsterData)
 		{
-			if (Data->LocomotionClass && Data->LocomotionClass->IsChildOf(UWaxButterLocomotionComponent::StaticClass()))
-			{
-				HalfHeight = FMath::Max(10.0f, Data->ButterLocomotion.HalfZ) + 4.0f;
-			}
-			else
-			{
-				HalfHeight = FMath::Max(10.0f, Data->CapsuleHalfHeight) + 4.0f;
-			}
+			HalfHeight = Data->GetSpawnHalfHeight() + 4.0f;
 		}
 	}
 	const FVector SpawnLoc(XYPos.X, XYPos.Y, GroundZ + HalfHeight);
@@ -365,9 +568,11 @@ void AWaxPpuLabCharacter::SpawnDemoWaxBallInFront()
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 	if (AWaxMonsterBase* Spawned = GetWorld()->SpawnActor<AWaxMonsterBase>(TestMonsterClass, SpawnTransform, SpawnParams))
 	{
-		if (GActiveDevAudioPreset >= 1 && Spawned->WaxDestructible)
+		const AWaxPpuLabGameMode* GameMode = GetWorld()->GetAuthGameMode<AWaxPpuLabGameMode>();
+		const int32 ActivePreset = GameMode ? GameMode->GetActiveDevAudioPreset() : 0;
+		if (ActivePreset >= 1 && Spawned->WaxDestructible)
 		{
-			Spawned->WaxDestructible->SelectDevAudioProfile(GActiveDevAudioPreset - 1);
+			Spawned->WaxDestructible->SelectDevAudioProfile(ActivePreset - 1);
 		}
 	}
 }

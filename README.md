@@ -25,10 +25,10 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR �
 ## 시스템 아키텍처
 
 ### 1. 플레이어 계층 (`Source/WaxPpuLab/`)
-- `AWaxPpuLabCharacter` (`BP_FirstPersonCharacter` 부모):
-  - 전방 부유 구체 타겟(`GetFloatingTargetSphereCenter`) 기반 오버랩 타격(`DoWaxCrackTrace`)
+- `AWaxPpuLabCharacter` (`BP_WaxPlayer` / `BP_FirstPersonCharacter` 부모):
+  - 펀치 애님 몽타주(`RequestPunch`) 및 `UWaxPunchAnimNotify` 시점의 주먹 본 기반 구체 오버랩 타격(`HandlePunchImpactNotify` → `ExecuteWaxImpactAtLocation`)
   - 이동 중 발밑 파편 물리 발차기(`UpdateDebrisKick`)
-  - 매 프레임 `MPC_WaxTargeting`에 조준 구체 파라미터 전달
+  - 타격 시점에만 `MPC_WaxTargeting`에 빨강 표면 마커를 `PunchMarkerDurationSec` 동안 표시(`bShowPunchImpactMarker` / `bShowDebugPunchImpact`로 개별 제어)
   - 테스트 몬스터 소환(`SpawnDemoWaxBallInFront`) 및 오디오 프리셋 전환(`SetWaxAudioPreset`)
 - `AWaxPpuLabPlayerController`, `AWaxPpuLabCameraManager`, `AWaxPpuLabGameMode`: 1인칭 입력 매핑, 카메라 피치/시점, 게임모드 기본 틀 제공.
 
@@ -101,9 +101,11 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR �
   - `Collapse`: `bAllowKickAfterCollapse`, `bMuteCollisionAudioAfterCollapse`, `CollapseCollisionMaxGraceSec`
   - `Debug`: `bShowDebugCounters`
 
-### 3. 플레이어 공격·타게팅 — `AWaxPpuLabCharacter` (`/Game/FirstPerson/Blueprints/BP_FirstPersonCharacter`)
-- `WaxDemo | Targeting`: `TargetingMPC`, `WaxTargetForwardDistance`, `WaxImpactRadius`, `bShowDebugTargetSphere`, `TargetDecalColor/EmissiveBoost/Opacity/EdgeSoftness`
-- `WaxDemo | Impact`: `WaxImpactStrain` (기본 `320,000`)
+### 3. 플레이어 공격·펀치 마커 — `AWaxPpuLabCharacter` (`/Game/WaxPpu/Player/BP_WaxPlayer`, `/Game/FirstPerson/Blueprints/BP_FirstPersonCharacter`)
+- `WaxDemo | Impact`: `WaxImpactRadius` (기본 `75.0`), `WaxImpactStrain` (기본 `320,000`)
+- `WaxDemo | Punch`: `PunchMontages`, `PunchPlayRate`, `PunchCooldownSec`, `PunchBoneForwardOffset`
+- `WaxDemo | PunchMarker`: `TargetingMPC`, `bShowPunchImpactMarker` (기본 `true`), `bShowDebugPunchImpact` (기본 `false`), `PunchMarkerColor/DurationSec/EmissiveBoost/Opacity/EdgeSoftness`
+- `WaxDemo | Camera`: `CameraBaseOffset`, `HeadFollowAlpha`, `HeadFollowInterpSpeed`, `MaxHeadForwardOffset`, `HeadSocketName`
 - `WaxDemo | DebrisKick`: `bEnableDebrisKick`, `DebrisKickRadius`, `DebrisKickStrength`, `DebrisKickUpwardBoost`, `DebrisKickMinMoveSpeed`
 - `WaxDemo | Spawn`: `TestMonsterClass`, `TestMonsterClasses`, `WaxSpawnDistance`
 
