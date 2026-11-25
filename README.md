@@ -1,78 +1,136 @@
 # WaxPpuLab
 
-Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + ASMR 오디오 기반 **왁뿌던전 탈출** 프로토타입 프로젝트입니다.
+Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR 오디오 프로토타입(**왁뿌던전 탈출**) 프로젝트입니다.
+신규 협업자 및 AI 에이전트용 불변 가드레일·빌드 주의사항은 [AGENTS.md](./AGENTS.md)를 먼저 확인하세요.
 
-## 조작법 (PIE)
+---
 
-| 키 | 동작 |
+## 빠른 시작 & 조작법 (PIE)
+
+- **기본 시작 맵**: `/Game/Maps/Lvl_WaxPpuDemo`
+- **기본 GameMode**: `/Game/FirstPerson/Blueprints/BP_FirstPersonGameMode`
+
+| 입력 | 동작 |
 |---|---|
 | `WASD` / 마우스 | 이동 / 시점 |
-| `SpaceBar` / 좌클릭 | 왁스 및 눈알 깎기(홀드 연타 지원) |
+| `SpaceBar` / 좌클릭 | 왁스 및 눈알 깎기 (홀드 연타 지원) |
 | `Q` / `E` | 소환할 몬스터 전환 (`BP_WaxBall_Basic` ↔ `BP_WaxButter`) |
-| `R` | 현재 선택 몬스터 플레이어 앞 소환 |
-| `1` / `2` | 개발용 ASMR 사운드 버전 전환 (`1`: WoodPlank + Heavy/Bamboo 랜덤 충돌 [기본], `2`: HardBlock + Jade/SoftWax 랜덤 충돌) |
+| `R` | 현재 선택된 몬스터를 플레이어 전방에 소환 |
+| `1` / `2` | 개발용 ASMR 사운드 프리셋 전환 (`1`: WoodPlank + Heavy/BambooClick 랜덤 [기본], `2`: HardBlock + JadeMarble/SoftWaxTap 랜덤) |
 
-## 몬스터 아키텍처
+- **콘솔 명령 (`UFUNCTION(Exec)`)**: `SetWaxAudioPreset <1..10>` — 현재 월드 몬스터 전체의 오디오 프리셋을 즉시 전환하며, 전역 상태(`GActiveDevAudioPreset`)에 저장되어 이후 `R` 키로 새로 소환되는 몬스터에도 자동 적용됩니다.
 
-- **평탄 1단계 상속**: `AWaxMonsterBase` (`ACharacter`) → 직계 블루프린트 자식(`BP_WaxBall_Basic`, `BP_WaxButter`)만 사용합니다.
-- **공통 컴포넌트 (`AWaxMonsterBase`)**:
-  - `BodyPivot`: 껍질·코어·눈알이 함께 부착되는 중심 피벗(눈알은 몸체 한 곳에 고정).
+---
+
+## 시스템 아키텍처
+
+### 1. 플레이어 계층 (`Source/WaxPpuLab/`)
+- `AWaxPpuLabCharacter` (`BP_FirstPersonCharacter` 부모):
+  - 전방 부유 구체 타겟(`GetFloatingTargetSphereCenter`) 기반 오버랩 타격(`DoWaxCrackTrace`)
+  - 이동 중 발밑 파편 물리 발차기(`UpdateDebrisKick`)
+  - 매 프레임 `MPC_WaxTargeting`에 조준 구체 파라미터 전달
+  - 테스트 몬스터 소환(`SpawnDemoWaxBallInFront`) 및 오디오 프리셋 전환(`SetWaxAudioPreset`)
+- `AWaxPpuLabPlayerController`, `AWaxPpuLabCameraManager`, `AWaxPpuLabGameMode`: 1인칭 입력 매핑, 카메라 피치/시점, 게임모드 기본 틀 제공.
+
+### 2. 몬스터 계층 (`AWaxMonsterBase`)
+- **평탄 1단계 상속**: `AWaxMonsterBase`(`ACharacter`) → 직계 블루프린트 자식(`BP_WaxBall_Basic`, `BP_WaxButter`)만 사용합니다.
+- **공통 컴포넌트**:
+  - `BodyPivot`: 껍질·코어·눈알이 함께 부착되는 중심 피벗(눈알은 몸체에 고정).
   - `ShellCollection` (`UGeometryCollectionComponent`): Chaos 파괴 왁스 껍질(붕괴 시 그림자 자동 OFF).
-  - `CoreMesh` + `AWaxMonsterCore`: 붕괴 시 탄성 물리(`PM_JellyBounce`)로 튀며 떨어지는 코어 및 부활 시스템.
-  - `EyeLeftGC` / `EyeRightGC`: 독립 강도·내구도로 직접 조각낼 수 있는 Chaos 눈알(그림자 OFF).
-  - `WaxDestructible` (`UWaxDestructibleComponent`): 국소 크레이터 파괴, 리프 파괴율 추적, 경도 존, 실시간 MetaSound 오디오.
+  - `CoreMesh` + `AWaxMonsterCore`: 붕괴 시 탄성 물리(`PM_JellyBounce`)로 튀며 방출되는 코어 및 부활 루프.
+  - `EyeLeftGC` / `EyeRightGC`: 껍질과 독립된 강도·내구도로 개별 파쇄 가능한 Chaos 눈알.
+  - `WaxDestructible` (`UWaxDestructibleComponent`): 2단계 국소 파괴 필드(`Chaos_Object_Dynamic` 전환 → `Chaos_ExternalClusterStrain` 인가), 리프 잔존율 추적 및 임계 붕괴, 경도 존, 물리 기반 MetaSound 오디오.
 - **전략 로코모션 (`UWaxLocomotionComponent`)**:
-  - `UWaxRollingLocomotionComponent`: `BP_WaxBall_Basic`용 실제 변위(`Δp`)·바닥 법선 기반 물리 연동 구르기.
-  - `UWaxButterLocomotionComponent`: `BP_WaxButter`용 `HopAlign → LayDown → TumbleCharge → StandUp` 기둥형 큐브 구르기 돌진.
+  - `UWaxRollingLocomotionComponent`: `BP_WaxBall_Basic`용 실제 변위(`Δp`)·바닥 법선 외적 기반 물리 연동 구르기.
+  - `UWaxButterLocomotionComponent`: `BP_WaxButter`용 `HopAlign → LayDown → TumbleCharge → StandUp` 4단계 FSM 및 전·후면 최단각 양방향 텀블링(`TumbleDirectionSign`).
+
+### 3. 핵심 서브시스템 설계
+- **고정 수명 파편 제거 (`RemoveOnBreak`)**: `DF_WaxOrb`, `DF_WaxButter`, `DF_MonsterEye` Dataflow에 `FRemoveOnBreakDataflowNode`(`PostBreakTimer 1.5~2.0s`, `RemovalTimer 0.35~0.45s`, `ScaleOnRemoval=True`)를 삽입하고 `bAllowRemovalOnBreak=true`, `bAllowRemovalOnSleep=false`로 고정해 바닥 잔류 파편·소음을 차단합니다.
+- **물리 기반 하이브리드 ASMR 오디오**: `MS_WaxCrackASMR` 프리셋과 `FWaxCollisionVariant` 구조체로 파괴음과 파편 충돌음을 이원화합니다. 파괴 시 다중 그레인 클리핑 방지를 위해 `QueueDensityScale`을 적용하고, 충돌음은 `AccumulatedImpulse`·`Mass`·`NormalSpeed`에서 산출한 음향 압력($\sqrt{E}$)에 Weber-Fechner 로그 라우드니스 압축과 지수 분포 쿨다운을 적용합니다.
+- **Subsurface 밀랍 셰이딩 & 순수 발광 타게팅**:
+  - `M_WaxButter`: `Subsurface` 셰이딩(따뜻한 노란 밀랍 + `Roughness 0.18` / `Specular 0.60`). `MPC_WaxTargeting` 구체 마스크 내부에서는 `BaseColor`와 `SubsurfaceColor`를 `0`으로 차단하고 `MarkerColor * EmissiveBoost`만 다이렉트 출력해 바탕 왁스 색과 무관하게 선명한 조준 표시를 유지합니다.
+  - `M_ButterCore` / `M_JellyCore`: 노란 겉 왁스와 대비되는 핑크·로즈 러프 무광 질감(`Roughness 0.84`, `Specular 0.12`)으로 통일했습니다.
+
+---
+
+## 콘텐츠 & 에셋 맵
+
+| 경로 | 주요 에셋 |
+|---|---|
+| `/Game/WaxPpu/Audio/Foley/` | CC0 충격음 기반 `SW_*` 사운드 웨이브 |
+| `/Game/WaxPpu/Audio/MetaSounds/` | `MS_WaxCrackASMR` 및 프리셋(`WoodPlank`, `HardBlock`, `Heavy`, `BambooClick`, `JadeMarble`, `SoftWaxTap`), `SC_WaxCrack` |
+| `/Game/WaxPpu/Blueprints/` | `BP_WaxBall_Basic`, `BP_WaxButter` |
+| `/Game/WaxPpu/Data/` | `DA_WaxBall_Basic`, `DA_WaxButter` (`UWaxMonsterDataAsset`) |
+| `/Game/WaxPpu/Destruction/Dataflow/` | `DF_WaxOrb`, `DF_WaxButter`, `DF_MonsterEye` |
+| `/Game/WaxPpu/Destruction/GeometryCollections/` | `GC_WaxOrb`, `GC_WaxButter`, `GC_MonsterEye` |
+| `/Game/WaxPpu/Materials/` | `M_WaxButter`, `M_ButterCore`, `M_JellyCore`, `M_MonsterEye`, `MPC_WaxTargeting` |
+| `/Game/WaxPpu/Physics/` | `PM_JellyBounce` |
+| `/Game/Maps/` | `Lvl_WaxPpuDemo` |
+| `/Game/FirstPerson/` | `Blueprints/BP_FirstPersonCharacter`, `BP_FirstPersonGameMode`, `Anims/ABP_FP_Copy` |
+| `/Game/Input/` | `IMC_Default`, `Actions/IA_*` |
 
 ---
 
 ## 튜닝값 위치 및 수정 가이드
 
-언리얼 에디터에서 별도 C++ 수정 없이 아래 에셋/컴포넌트의 디테일 패널에서 모든 튜닝값을 수정할 수 있습니다.
+언리얼 에디터에서 별도 C++ 수정 없이 아래 에셋·컴포넌트의 디테일 패널에서 모든 튜닝값을 수정할 수 있습니다.
 
-> **팁 (여러 몬스터 일괄 비교·수정)**: 콘텐츠 브라우저에서 `DA_WaxBall_Basic`, `DA_WaxButter`를 함께 선택 → 우클릭 → **Asset Actions → Edit Selection in Property Matrix**로 열면 표 형태로 한 번에 수정할 수 있습니다.
+> **팁 (일괄 비교·수정)**: 콘텐츠 브라우저에서 `DA_WaxBall_Basic`, `DA_WaxButter`를 함께 선택 → 우클릭 → **Asset Actions → Edit Selection in Property Matrix**로 표 형태 일괄 편집이 가능합니다.
 
 ### 1. 몬스터별 스펙 — DataAsset (`/Game/WaxPpu/Data/DA_WaxBall_Basic`, `DA_WaxButter`)
 
 | 카테고리 | 주요 파라미터 | 설명 |
 |---|---|---|
 | **Visual** | `ShellCollectionAsset`, `ShellRelativeOffset` | Chaos 껍질 에셋 및 `BodyPivot` 기준 오프셋 |
-| **Movement** | `LocomotionClass`, `MoveSpeed`, `StopDistanceToPlayer`, `RollRadius`, `CapsuleRadius`, `CapsuleHalfHeight` | 로코모션 클래스, 이동 속도, 공격 대기 거리(이 거리 이내에서는 이동 중단), 구르기 반경, 캡슐 크기 |
-| **Movement \| Butter** | `ButterLocomotion` (`HalfX/Y/Z`, `MinChargeStartDistance`, `HopDuration/Pause/Height`, `MaxYawPerHopDeg`, `AlignToleranceDeg`, `LayDownDuration`, `StandUpDuration`, `EffectiveGravity`, `DriveAngularAccel`, `InitialStepOmega`, `StepBounceRetention`, `MaxTumbleSteps`, `MaxCorrectionYawPerStepDeg`, `SteerYawRateDeg`, `AbortAngleDeg`) | **왁스버터 전용 튜닝값 전부** (`UWaxButterLocomotionComponent`의 런타임 필드는 읽기 전용이며, 반드시 `DA_WaxButter.ButterLocomotion`에서 수정) |
-| **Destruction** | `CollapseRemainingRatio`, `CollapseReleaseStrain`, `DebrisLifeSpanAfterCollapse`, `HardnessZones` | 붕괴 임계 잔여율(기본 `0.30`), 붕괴 시 방출 스트레인, 파편 수명, 부위별 경도/오디오 존 |
+| **Movement** | `LocomotionClass`, `MoveSpeed`, `StopDistanceToPlayer`, `RollRadius`, `CapsuleRadius`, `CapsuleHalfHeight` | 로코모션 클래스, 이동 속도, 공격 대기 거리, 구르기 반경, 캡슐 크기 |
+| **Movement \| Butter** | `ButterLocomotion` (`HalfX/Y/Z`, `MinChargeStartDistance`, `HopDuration/Pause/Height`, `MaxYawPerHopDeg`, `AlignToleranceDeg`, `LayDownDuration`, `StandUpDuration`, `EffectiveGravity`, `DriveAngularAccel`, `InitialStepOmega`, `StepBounceRetention`, `MaxTumbleSteps`, `MaxCorrectionYawPerStepDeg`, `SteerYawRateDeg`, `AbortAngleDeg`) | **왁스버터 전용 튜닝값 전부** (`UWaxButterLocomotionComponent` 런타임 필드는 읽기 전용이며 반드시 `DA_WaxButter.ButterLocomotion`에서 수정) |
+| **Destruction** | `CollapseRemainingRatio`, `CollapseReleaseStrain`, `DebrisLifeSpanAfterCollapse`, `HardnessZones` | 붕괴 임계 잔여율(기본 `0.30`), 붕괴 방출 스트레인, 파편 수명, 부위별 경도/오디오 존 |
 | **Core** | `CoreMeshAsset`, `CoreMaterial`, `CorePhysicalMaterial`, `CoreRelativeScale/Offset`, `CoreLinearDamping`, `CoreAngularDamping`, `CorePopVelocityMin/Max`, `bEnableCoreRevive`, `CoreReviveDelaySec`, `ReviveGrowDuration`, `RevivePreviewMeshAsset/Material/Scale`, `CoreBounceSound` | 코어 외형·탄성·팝 속도·감쇠, 자동 부활 ON/OFF 및 재생 프리뷰 설정 |
 | **Eyes** | `EyeCollectionAsset`, `EyeMaterial`, `EyeDamageThreshold`, `EyeDurability`, `EyeForwardOffset`, `EyeSpacing`, `EyeHeightOffset`, `EyeScale`, `EyeBaseHitRadius`, `EyeDropTimeoutSec`, `EyeShatterSound` | 눈알 Chaos 에셋, 파괴 임계치·타격 내구도, 배치 오프셋·크기, 붕괴 시 낙하 파쇄 타임아웃 |
-| **Audio** | `DefaultAudioProfile`, `DevAudioProfiles` | 기본 파괴 사운드 프로파일 및 개발용 1~0번 프리셋 목록 |
+| **Audio** | `DefaultAudioProfile`, `DevAudioProfiles` | 기본 파괴·충돌 하이브리드 프로파일 및 개발용 프리셋 목록 (입력 슬롯은 `1..9, 0` 최대 10개 지원, 현재 `1`·`2`번 2개 할당) |
 
 > **왁스버터(`DA_WaxButter`) 주의사항**
-> - `UWaxButterLocomotionComponent`를 사용할 때는 **`MoveSpeed`와 `CapsuleHalfHeight`가 무시**됩니다.
-> - 버터의 구르기 속도·기둥 높이는 반드시 **`ButterLocomotion`** (`EffectiveGravity`, `DriveAngularAccel`, `InitialStepOmega`, `HalfX/Y/Z`)에서 수정하세요.
+> - `UWaxButterLocomotionComponent` 사용 시 **`MoveSpeed`와 `CapsuleHalfHeight`는 무시**됩니다.
+> - 버터 구르기 속도·기둥 높이는 반드시 **`ButterLocomotion`** (`EffectiveGravity`, `DriveAngularAccel`, `InitialStepOmega`, `HalfX/Y/Z`)에서 수정하세요.
 > - `StopDistanceToPlayer`는 버터에서도 구르기 종료 및 최소 돌진 기준(`Max(StopDistanceToPlayer, MinChargeStartDistance)`)에 정상 반영됩니다.
 
 ### 2. 공통 몬스터 BP — `/Game/WaxPpu/Blueprints/BP_WaxBall_Basic`, `BP_WaxButter`
+- **루트(`AWaxMonsterBase`)**: `MonsterData`, `bChasePlayer`, `bEnableHitSlowdown`, `HitSlowdownDuration`, `HitSlowdownSpeedMultiplier`
+- **`WaxDestructible` 컴포넌트**:
+  - `Audio`: `BreakGrainSpreadMin/MaxSec`, `MaxQueuedGrains`, `CollapseGrainSpreadMaxSec`, `CollisionSoundSpeedThreshold`, `MinCollisionAudioInterval`, `CollisionSpatialCellSize/CooldownSec`, `CollisionCrackle/Snap/BodyScale`
+  - `Collapse`: `bAllowKickAfterCollapse`, `bMuteCollisionAudioAfterCollapse`, `CollapseCollisionMaxGraceSec`
+  - `Debug`: `bShowDebugCounters`
 
-- **루트(`AWaxMonsterBase`) 디테일**:
-  - `MonsterData`: 참조할 DataAsset 연결
-  - `bChasePlayer`: 플레이어 추적 ON/OFF (레벨 배치 테스트용)
-  - `bEnableHitSlowdown`, `HitSlowdownDuration`, `HitSlowdownSpeedMultiplier`: 피격 시 일시 감속 연출
-- **`WaxDestructible` 컴포넌트 디테일**:
-  - `WaxDestructible | Audio`: `BreakGrainSpreadMin/MaxSec`, `MaxQueuedGrains`, `CollapseGrainSpreadMaxSec`, `CollisionSoundSpeedThreshold`, `MinCollisionAudioInterval`, `CollisionSpatialCellSize/CooldownSec`, `CollisionCrackle/Snap/BodyScale`
-  - `WaxDestructible | Collapse`: `bAllowKickAfterCollapse`, `bMuteCollisionAudioAfterCollapse`, `CollapseCollisionMaxGraceSec`
-  - `WaxDestructible | Debug`: `bShowDebugCounters` (화면 디버그 카운터 ON/OFF)
-
-### 3. 플레이어 공격·타게팅 — `/Game/FirstPerson/Blueprints/BP_FirstPersonCharacter`
-
+### 3. 플레이어 공격·타게팅 — `AWaxPpuLabCharacter` (`/Game/FirstPerson/Blueprints/BP_FirstPersonCharacter`)
 - `WaxDemo | Targeting`: `TargetingMPC`, `WaxTargetForwardDistance`, `WaxImpactRadius`, `bShowDebugTargetSphere`, `TargetDecalColor/EmissiveBoost/Opacity/EdgeSoftness`
 - `WaxDemo | Impact`: `WaxImpactStrain` (기본 `320,000`)
 - `WaxDemo | DebrisKick`: `bEnableDebrisKick`, `DebrisKickRadius`, `DebrisKickStrength`, `DebrisKickUpwardBoost`, `DebrisKickMinMoveSpeed`
 - `WaxDemo | Spawn`: `TestMonsterClass`, `TestMonsterClasses`, `WaxSpawnDistance`
 
-## 빌드 (macOS)
+---
+
+## 렌더링 예산 & 빌드 (macOS)
+
+### M4 16GB 통합 메모리 렌더링 설정 (`Config/DefaultEngine.ini`)
+- **유지**: Lumen 소프트웨어 GI(`r.DynamicGlobalIlluminationMethod=1`), Lumen 소프트웨어 반사(`r.ReflectionMethod=1`), Virtual Shadow Maps(`r.Shadow.Virtual.Enable=1`), Nanite(`r.Nanite.ProjectEnabled=True`), Substrate.
+- **비활성화 (6개 CVar)**:
+  - `r.Lumen.HardwareRayTracing=False`
+  - `r.Lumen.Reflections.HardwareRayTracing.Translucent.Refraction.EnableForProject=False`
+  - `r.RayTracing.Shadows=False`
+  - `r.RayTracing=False`
+  - `r.RayTracing.RayTracingProxies.ProjectEnabled=False`
+  - `r.PathTracing=False`
+
+### macOS 증분 빌드
+Xcode가 여러 버전 설치된 환경이라면 먼저 `DEVELOPER_DIR`을 UE 5.9 호환 Xcode로 맞춥니다(로컬 머신의 `ue-on` 셸 함수는 선택 사항).
 
 ```bash
-source ~/.zshrc && ue-on
+# (선택) Xcode 툴체인 지정 예시
+export DEVELOPER_DIR="/Applications/Xcode-26.1.1.app/Contents/Developer"
+
 "/Users/Shared/Epic Games/UE_5.9/Engine/Build/BatchFiles/Mac/Build.sh" \
   WaxPpuLabEditor Mac Development \
-  -Project="$(pwd)/WaxPpuLab.uproject" -WaitMutex -FromMsBuild
+  -Project="$(pwd)/WaxPpuLab.uproject" -WaitMutex
 ```
+
+> **Git 협업 주의**: 이 저장소는 Git LFS 없이 `.uasset` 바이너리를 직접 추적합니다. 동일 `.uasset`의 동시 편집을 피하세요. `Content/Collections/`, `Content/Developers/`는 `.gitignore`로 제외되어 있습니다.
