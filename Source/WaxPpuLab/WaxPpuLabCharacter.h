@@ -139,9 +139,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|Camera")
 	FName HeadSocketName = FName(TEXT("head"));
 
-	/** 임시 3인칭 프리뷰 카메라 활성화 여부 (T 키로 토글, 상반신 모션 확인용) */
+	/** 3인칭 프리뷰 카메라 활성화 여부 (개발 테스트용 기본값 켜짐, T 키로 1인칭 전환) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|Camera")
-	bool bThirdPersonPreview = false;
+	bool bThirdPersonPreview = true;
 
 	/** 3인칭 프리뷰 시 시선 기준 카메라 오프셋 (cm, X: 뒤로(-), Y: 우측(+), Z: 위(+)) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|Camera")
