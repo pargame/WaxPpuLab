@@ -28,8 +28,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "WaxLocomotion")
 	virtual void StopLocomotion();
 
+	/** 넉백 등 외부 힘이 이동을 덮어쓰지 않도록 로코모션 구동을 일정 시간 멈춤 (초). 진행 중이면 더 긴 쪽으로 연장 */
+	UFUNCTION(BlueprintCallable, Category = "WaxLocomotion")
+	void SuspendFor(float DurationSec);
+
+	UFUNCTION(BlueprintPure, Category = "WaxLocomotion")
+	bool IsSuspended() const { return SuspendRemaining > 0.0f; }
+
 protected:
 	virtual bool ShouldApplyDefaultMovement() const { return true; }
+	/** 일시 정지가 끝나는 프레임에 호출 (서브클래스가 상태 재진입 처리) */
+	virtual void OnSuspendEnded() {}
 	void ApplyEffectiveMoveSpeed();
 
 	UPROPERTY(Transient)
@@ -44,6 +53,7 @@ protected:
 	FVector DesiredMoveDirection = FVector::ZeroVector;
 	float BaseMoveSpeed = 160.0f;
 	float SpeedMultiplier = 1.0f;
+	float SuspendRemaining = 0.0f;
 	bool bStopped = false;
 };
 
@@ -151,6 +161,7 @@ public:
 
 protected:
 	virtual bool ShouldApplyDefaultMovement() const override { return false; }
+	virtual void OnSuspendEnded() override;
 
 private:
 	void EnterState(EWaxButterLocoState NewState);
@@ -184,4 +195,6 @@ private:
 	bool GetTumbleTarget(FVector& OutDir2D, float& OutDist2D) const;
 	float StandStartHeight = 75.0f;
 	float StandStartTheta = 0.0f;
+	float CurrentLayAlpha = 0.0f;
+	float StandStartLayAlpha = 1.0f;
 };

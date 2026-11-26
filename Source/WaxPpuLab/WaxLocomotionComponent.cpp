@@ -22,6 +22,7 @@ void UWaxLocomotionComponent::InitializeLocomotion(AWaxMonsterBase* InMonster, U
 	BaseMoveSpeed = MonsterData ? MonsterData->MoveSpeed : 160.0f;
 	SpeedMultiplier = 1.0f;
 	DesiredMoveDirection = FVector::ZeroVector;
+	SuspendRemaining = 0.0f;
 	bStopped = false;
 
 	if (OwnerMonster)
@@ -61,6 +62,14 @@ void UWaxLocomotionComponent::ApplyEffectiveMoveSpeed()
 	}
 }
 
+void UWaxLocomotionComponent::SuspendFor(float DurationSec)
+{
+	if (DurationSec > 0.0f)
+	{
+		SuspendRemaining = FMath::Max(SuspendRemaining, DurationSec);
+	}
+}
+
 void UWaxLocomotionComponent::StopLocomotion()
 {
 	bStopped = true;
@@ -75,6 +84,17 @@ void UWaxLocomotionComponent::TickComponent(float DeltaTime, ELevelTick TickType
 	if (bStopped || !OwnerMonster || DeltaTime <= KINDA_SMALL_NUMBER)
 	{
 		return;
+	}
+
+	if (SuspendRemaining > 0.0f)
+	{
+		SuspendRemaining -= DeltaTime;
+		if (SuspendRemaining > 0.0f)
+		{
+			return;
+		}
+		SuspendRemaining = 0.0f;
+		OnSuspendEnded();
 	}
 
 	if (ShouldApplyDefaultMovement() && !DesiredMoveDirection.IsNearlyZero())
@@ -216,6 +236,7 @@ void UWaxButterLocomotionComponent::InitializeLocomotion(AWaxMonsterBase* InMons
 
 	LocoState = EWaxButterLocoState::HopAlign;
 	StateElapsed = 0.0f;
+	CurrentLayAlpha = 0.0f;
 	bInHopAir = false;
 	LaySign = 1.0f;
 	PrevLayLateral = 0.0f;
@@ -369,6 +390,7 @@ void UWaxButterLocomotionComponent::EnterState(EWaxButterLocoState NewState)
 	{
 		ChooseLayDirection();
 		PrevLayLateral = 0.0f;
+		CurrentLayAlpha = 0.0f;
 
 		// 눕는 순간의 플레이어 위치를 기록 (추적 비율에 따라 현재 위치와 섞어 굴림 목표로 사용)
 		bHasLockedTarget = false;
@@ -387,6 +409,7 @@ void UWaxButterLocomotionComponent::EnterState(EWaxButterLocoState NewState)
 	else if (NewState == EWaxButterLocoState::TumbleCharge)
 	{
 		SetCapsuleHalfHeightKeepFloor(HalfY);
+		CurrentLayAlpha = 1.0f;
 		TumbleStepIndex = 0;
 		TumbleTheta = 0.0f;
 		TumbleOmega = InitialStepOmega * FMath::Max(0.25f, SpeedMultiplier);
@@ -397,9 +420,11 @@ void UWaxButterLocomotionComponent::EnterState(EWaxButterLocoState NewState)
 	{
 		StandStartHeight = (TumbleStepIndex % 2 == 0) ? HalfY : HalfX;
 		StandStartTheta = TumbleTheta;
+		StandStartLayAlpha = CurrentLayAlpha;
 		TumbleTheta = 0.0f;
 		PendingSteerYaw = 0.0f;
-		PrevLayLateral = StandStartHeight + HalfZ;
+		const float StartAngle = StandStartLayAlpha * (PI * 0.5f);
+		PrevLayLateral = StandStartHeight * (1.0f - FMath::Cos(StartAngle)) + HalfZ * FMath::Sin(StartAngle);
 		SetCapsuleHalfHeightKeepFloor(HalfZ);
 	}
 }
@@ -409,6 +434,11 @@ void UWaxButterLocomotionComponent::TickComponent(float DeltaTime, ELevelTick Ti
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
 	if (bStopped || !OwnerMonster || !BodyPivot || DeltaTime <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	if (IsSuspended())
 	{
 		return;
 	}
@@ -427,6 +457,25 @@ void UWaxButterLocomotionComponent::TickComponent(float DeltaTime, ELevelTick Ti
 	case EWaxButterLocoState::StandUp:
 		TickStandUp(DeltaTime);
 		break;
+	}
+}
+
+void UWaxButterLocomotionComponent::OnSuspendEnded()
+{
+	// 누운 상태에서 밀려났으면 현재 자세에서 일어난 뒤 HopAlign으로, 서 있었으면 바로 HopAlign 재진입
+	if (LocoState == EWaxButterLocoState::LayDown)
+	{
+		TumbleStepIndex = 0;
+		TumbleTheta = 0.0f;
+		EnterState(EWaxButterLocoState::StandUp);
+	}
+	else if (LocoState == EWaxButterLocoState::TumbleCharge)
+	{
+		EnterState(EWaxButterLocoState::StandUp);
+	}
+	else if (LocoState == EWaxButterLocoState::HopAlign)
+	{
+		EnterState(EWaxButterLocoState::HopAlign);
 	}
 }
 
@@ -500,6 +549,7 @@ void UWaxButterLocomotionComponent::TickLayDown(float DeltaTime)
 	const float RawT = FMath::Clamp(StateElapsed / FMath::Max(0.05f, LayDownDuration), 0.0f, 1.0f);
 	// Gravity-weighted ease-in so the block tips over naturally with weight
 	const float Alpha = FMath::Pow(RawT, 1.65f);
+	CurrentLayAlpha = Alpha;
 	const float AngleRad = Alpha * (PI * 0.5f);
 
 	const float CenterZ = HalfY * FMath::Sin(AngleRad) + HalfZ * FMath::Cos(AngleRad);
@@ -608,7 +658,7 @@ void UWaxButterLocomotionComponent::TickStandUp(float DeltaTime)
 	StateElapsed += DeltaTime;
 	const float RawT = FMath::Clamp(StateElapsed / FMath::Max(0.05f, StandUpDuration), 0.0f, 1.0f);
 	const float SmoothT = FMath::SmoothStep(0.0f, 1.0f, RawT);
-	const float LayAlpha = 1.0f - SmoothT;
+	const float LayAlpha = StandStartLayAlpha * (1.0f - SmoothT);
 	const float AngleRad = LayAlpha * (PI * 0.5f);
 
 	const float CenterZ = StandStartHeight * FMath::Sin(AngleRad) + HalfZ * FMath::Cos(AngleRad);
@@ -627,8 +677,8 @@ void UWaxButterLocomotionComponent::TickStandUp(float DeltaTime)
 	const float TotalTumbleAngle = TumbleDirectionSign * (static_cast<float>(TumbleStepIndex) * (PI * 0.5f) + UnwoundTheta);
 
 	BodyPivot->SetRelativeLocation(FVector(0.0f, 0.0f, CenterZ - CapHalfH));
-	const FQuat UnwindQuat(FVector::ForwardVector, -LaySign * (PI * 0.5f) * SmoothT);
-	const FQuat LaidBaseQuat = ComputeLaidRelQuat(1.0f, TotalTumbleAngle);
+	const FQuat UnwindQuat(FVector::ForwardVector, -LaySign * (PI * 0.5f) * StandStartLayAlpha * SmoothT);
+	const FQuat LaidBaseQuat = ComputeLaidRelQuat(StandStartLayAlpha, TotalTumbleAngle);
 	BodyPivot->SetRelativeRotation((UnwindQuat * LaidBaseQuat).GetNormalized());
 
 	if (RawT >= 1.0f)

@@ -515,6 +515,7 @@ void UWaxCombatComponent::HandleHitNotify(USkeletalMeshComponent* MeshComp, cons
 	}
 
 	const int32 NumTargets = ApplyImpact(Center, Strain, Radius);
+	const int32 NumDebris = ApplyDebrisImpulse(Center);
 
 	if (!bSawActiveWindow && Phase == EWaxAttackPhase::Windup)
 	{
@@ -524,8 +525,9 @@ void UWaxCombatComponent::HandleHitNotify(USkeletalMeshComponent* MeshComp, cons
 	OnAttackHit.Broadcast(CurrentSlot, Center, NumTargets, Strain, Radius);
 	if (bVerboseLog)
 	{
-		UE_LOG(LogWaxCombat, Log, TEXT("WaxCombat Hit slot=%s bone=%s center=(%.1f,%.1f,%.1f) radius=%.1f strain=%.0f targets=%d t=%.3f"),
-			SlotName(CurrentSlot), *BoneName.ToString(), Center.X, Center.Y, Center.Z, Radius, Strain, NumTargets, Now());
+		UE_LOG(LogWaxCombat, Log, TEXT("WaxCombat Hit slot=%s bone=%s center=(%.1f,%.1f,%.1f) radius=%.1f strain=%.0f targets=%d knocked=%d knockH=%.0f knockV=%.0f debris=%d t=%.3f"),
+			SlotName(CurrentSlot), *BoneName.ToString(), Center.X, Center.Y, Center.Z, Radius, Strain, NumTargets,
+			LastKnockbackCount, CurrentSpec.KnockbackHorizontal, CurrentSpec.KnockbackVertical, NumDebris, Now());
 	}
 }
 
@@ -538,6 +540,7 @@ int32 UWaxCombatComponent::ApplyImpact(const FVector& Center, float Strain, floa
 	}
 
 	int32 NumTargets = 0;
+	LastKnockbackCount = 0;
 	TArray<FOverlapResult> Overlaps;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(WaxAttackSphere), false, GetOwner());
 	if (World->OverlapMultiByChannel(Overlaps, Center, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(Radius), Params))
@@ -555,6 +558,10 @@ int32 UWaxCombatComponent::ApplyImpact(const FVector& Center, float Strain, floa
 			{
 				Monster->ReceiveWaxImpact(Center, Strain, Radius);
 				++NumTargets;
+				if (ApplyKnockback(Monster))
+				{
+					++LastKnockbackCount;
+				}
 			}
 			else if (UWaxDestructibleComponent* Destructible = HitActor->FindComponentByClass<UWaxDestructibleComponent>())
 			{
@@ -567,6 +574,33 @@ int32 UWaxCombatComponent::ApplyImpact(const FVector& Center, float Strain, floa
 		}
 	}
 	return NumTargets;
+}
+
+bool UWaxCombatComponent::ApplyKnockback(AWaxMonsterBase* Monster) const
+{
+	if (!Monster || !OwnerCharacter || (CurrentSpec.KnockbackHorizontal <= 0.0f && CurrentSpec.KnockbackVertical <= 0.0f))
+	{
+		return false;
+	}
+
+	// 플레이어 → 몬스터 수평 방향으로 밀고, 겹쳐 있으면 공격 방향 사용
+	FVector Dir = (Monster->GetActorLocation() - OwnerCharacter->GetActorLocation()).GetSafeNormal2D();
+	if (Dir.IsNearlyZero())
+	{
+		Dir = GetAttackAimDirection().GetSafeNormal2D();
+	}
+	Monster->ReceiveKnockback(Dir * CurrentSpec.KnockbackHorizontal + FVector::UpVector * CurrentSpec.KnockbackVertical, CurrentSpec.KnockbackDurationSec);
+	return true;
+}
+
+int32 UWaxCombatComponent::ApplyDebrisImpulse(const FVector& Center) const
+{
+	if (CurrentSpec.DebrisImpulse <= 0.0f && CurrentSpec.DebrisImpulseUpward <= 0.0f)
+	{
+		return 0;
+	}
+	const FVector Velocity = GetAttackAimDirection().GetSafeNormal2D() * CurrentSpec.DebrisImpulse + FVector::UpVector * CurrentSpec.DebrisImpulseUpward;
+	return UWaxDestructibleComponent::KickDebrisInRadius(GetWorld(), Center, Velocity, CurrentSpec.DebrisImpulseRadius, GetOwner());
 }
 
 void UWaxCombatComponent::SetMarkerVisible(bool bVisible, const FVector& Center, float Radius)

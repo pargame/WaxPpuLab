@@ -2,6 +2,8 @@
 
 #include "Components/AudioComponent.h"
 #include "Engine/Engine.h"
+#include "Engine/OverlapResult.h"
+#include "Engine/World.h"
 #include "Field/FieldSystemObjects.h"
 #include "GeometryCollection/GeometryCollection.h"
 #include "GeometryCollection/GeometryCollectionComponent.h"
@@ -550,4 +552,41 @@ void UWaxDestructibleComponent::RefreshTickEnabled()
 	{
 		SetComponentTickEnabled(bNeedTick);
 	}
+}
+
+int32 UWaxDestructibleComponent::KickDebrisInRadius(UWorld* World, const FVector& Origin, const FVector& Velocity, float Radius, const AActor* IgnoreActor)
+{
+	if (!World || Radius <= 0.0f || Velocity.IsNearlyZero())
+	{
+		return 0;
+	}
+
+	TArray<FOverlapResult> Overlaps;
+	FCollisionObjectQueryParams ObjParams;
+	ObjParams.AddObjectTypesToQuery(ECC_PhysicsBody);
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(WaxDebrisKick), false, IgnoreActor);
+	if (!World->OverlapMultiByObjectType(Overlaps, Origin, FQuat::Identity, ObjParams, FCollisionShape::MakeSphere(Radius), QueryParams))
+	{
+		return 0;
+	}
+
+	int32 NumKicked = 0;
+	TSet<AActor*> CheckedActors;
+	for (const FOverlapResult& Overlap : Overlaps)
+	{
+		AActor* HitActor = Overlap.GetActor();
+		if (!HitActor || CheckedActors.Contains(HitActor))
+		{
+			continue;
+		}
+		CheckedActors.Add(HitActor);
+
+		UWaxDestructibleComponent* Destructible = HitActor->FindComponentByClass<UWaxDestructibleComponent>();
+		if (Destructible && Destructible->HasBrokenPieces() && (!Destructible->HasCollapsed() || Destructible->bAllowKickAfterCollapse))
+		{
+			Destructible->ApplyDebrisKick(Origin, Velocity, Radius);
+			++NumKicked;
+		}
+	}
+	return NumKicked;
 }

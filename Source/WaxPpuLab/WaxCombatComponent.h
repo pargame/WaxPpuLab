@@ -10,6 +10,7 @@ class UAnimInstance;
 class UAnimMontage;
 class UMaterialParameterCollection;
 class USkeletalMeshComponent;
+class AWaxMonsterBase;
 class UWaxAttackSetDataAsset;
 struct FAnimNotifyEventReference;
 
@@ -157,6 +158,9 @@ private:
 
 	FVector ComputeHitCenter(EWaxHitSource Source, FName BoneName, float ForwardOffset, bool& bOutValid) const;
 	int32 ApplyImpact(const FVector& Center, float Strain, float Radius);
+	bool ApplyKnockback(AWaxMonsterBase* Monster) const;
+	int32 ApplyDebrisImpulse(const FVector& Center) const;
+	int32 LastKnockbackCount = 0;
 	void SetMarkerVisible(bool bVisible, const FVector& Center = FVector::ZeroVector, float Radius = 0.0f);
 
 	void UpdateRotation(float DeltaTime);

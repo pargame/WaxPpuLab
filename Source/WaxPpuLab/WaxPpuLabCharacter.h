@@ -61,6 +61,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> CrackAction;
 
+	/** 밀어내기 발차기 입력 액션 (지상 전용, Started만 사용) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> KickAction;
+
 	/** 테스트 몬스터 스폰 입력 액션 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> SpawnTestMonsterAction;
@@ -211,6 +215,7 @@ public:
 private:
 	void OnAttackInputStarted();
 	void OnAttackInputReleased();
+	void OnKickInputStarted();
 	void TryStartCommandLineCapture();
 	void ApplyCameraViewMode();
 	void ApplyPlayerData();

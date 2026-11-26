@@ -145,6 +145,10 @@ struct FWaxAttackSpec
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Knockback", meta = (ClampMin = "0.0"))
 	float DebrisImpulse = 0.0f;
 
+	/** 파편에 더할 위쪽 속도 (cm/s). 클수록 파편이 떠오름 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Knockback", meta = (ClampMin = "0.0"))
+	float DebrisImpulseUpward = 0.0f;
+
 	/** 파편 임펄스 반경 (cm) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Knockback", meta = (ClampMin = "0.0"))
 	float DebrisImpulseRadius = 0.0f;

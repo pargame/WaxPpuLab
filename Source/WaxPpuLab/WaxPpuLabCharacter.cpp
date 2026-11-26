@@ -83,6 +83,10 @@ void AWaxPpuLabCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInput
 			EnhancedInputComponent->BindAction(CrackAction, ETriggerEvent::Completed, this, &AWaxPpuLabCharacter::OnAttackInputReleased);
 			EnhancedInputComponent->BindAction(CrackAction, ETriggerEvent::Canceled, this, &AWaxPpuLabCharacter::OnAttackInputReleased);
 		}
+		if (KickAction)
+		{
+			EnhancedInputComponent->BindAction(KickAction, ETriggerEvent::Started, this, &AWaxPpuLabCharacter::OnKickInputStarted);
+		}
 		if (SpawnTestMonsterAction)
 		{
 			EnhancedInputComponent->BindAction(SpawnTestMonsterAction, ETriggerEvent::Started, this, &AWaxPpuLabCharacter::SpawnDemoWaxBallInFront);
@@ -212,32 +216,7 @@ void AWaxPpuLabCharacter::UpdateDebrisKick()
 	const FVector KickOrigin = GetActorLocation() + FVector(0.0f, 0.0f, -35.0f);
 	const FVector KickVelocity = HorizVel * DebrisKickStrength + FVector(0.0f, 0.0f, DebrisKickUpwardBoost);
 
-	TArray<FOverlapResult> Overlaps;
-	FCollisionObjectQueryParams ObjParams;
-	ObjParams.AddObjectTypesToQuery(ECC_PhysicsBody);
-	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(WaxDebrisKick), false, this);
-
-	if (GetWorld()->OverlapMultiByObjectType(Overlaps, KickOrigin, FQuat::Identity, ObjParams, FCollisionShape::MakeSphere(DebrisKickRadius), QueryParams))
-	{
-		TSet<AActor*> CheckedActors;
-		for (const FOverlapResult& Overlap : Overlaps)
-		{
-			AActor* HitActor = Overlap.GetActor();
-			if (!HitActor || CheckedActors.Contains(HitActor))
-			{
-				continue;
-			}
-			CheckedActors.Add(HitActor);
-
-			if (UWaxDestructibleComponent* Destructible = HitActor->FindComponentByClass<UWaxDestructibleComponent>())
-			{
-				if (Destructible->HasBrokenPieces() && (!Destructible->HasCollapsed() || Destructible->bAllowKickAfterCollapse))
-				{
-					Destructible->ApplyDebrisKick(KickOrigin, KickVelocity, DebrisKickRadius);
-				}
-			}
-		}
-	}
+	UWaxDestructibleComponent::KickDebrisInRadius(GetWorld(), KickOrigin, KickVelocity, DebrisKickRadius, this);
 }
 
 void AWaxPpuLabCharacter::BeginPlay()
@@ -458,6 +437,14 @@ void AWaxPpuLabCharacter::OnAttackInputStarted()
 	{
 		CombatComponent->SetAttackHeld(true);
 		CombatComponent->PressAttackInput(EWaxAttackSlot::Basic);
+	}
+}
+
+void AWaxPpuLabCharacter::OnKickInputStarted()
+{
+	if (CombatComponent)
+	{
+		CombatComponent->PressAttackInput(EWaxAttackSlot::Kick);
 	}
 }
 

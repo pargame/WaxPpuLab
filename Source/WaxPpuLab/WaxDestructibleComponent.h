@@ -48,6 +48,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "WaxDestructible")
 	void ApplyDebrisKick(const FVector& KickOrigin, const FVector& KickVelocity, float Radius);
 
+	/** 반경 안의 모든 파괴체 파편에 속도를 준다. 영향받은 파괴체 수를 반환 */
+	static int32 KickDebrisInRadius(UWorld* World, const FVector& Origin, const FVector& Velocity, float Radius, const AActor* IgnoreActor);
+
 	UFUNCTION(BlueprintCallable, Category = "WaxDestructible")
 	void TriggerRemainingCollapse();
 

@@ -43,6 +43,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "WaxMonster")
 	void ReceiveWaxImpact(const FVector& WorldImpactPoint, float BaseStrain, float Radius);
 
+	/** 넉백: 속도(cm/s)로 밀어내고 DurationSec 동안 로코모션을 멈춰 이동이 넉백을 상쇄하지 않게 한다 */
+	UFUNCTION(BlueprintCallable, Category = "WaxMonster")
+	void ReceiveKnockback(const FVector& Velocity, float DurationSec);
+
 	UFUNCTION(BlueprintCallable, Category = "WaxMonster|Eyes")
 	void ApplyEyeImpact(const FVector& WorldImpactPoint, float BaseStrain, float Radius);
 

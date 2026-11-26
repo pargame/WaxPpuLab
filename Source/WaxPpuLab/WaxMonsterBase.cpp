@@ -293,6 +293,20 @@ void AWaxMonsterBase::ReceiveWaxImpact(const FVector& WorldImpactPoint, float Ba
 	}
 }
 
+void AWaxMonsterBase::ReceiveKnockback(const FVector& Velocity, float DurationSec)
+{
+	if (MonsterState != EWaxMonsterState::Active || Velocity.IsNearlyZero())
+	{
+		return;
+	}
+
+	if (ActiveLocomotion)
+	{
+		ActiveLocomotion->SuspendFor(DurationSec);
+	}
+	LaunchCharacter(Velocity, true, true);
+}
+
 void AWaxMonsterBase::ApplyEyeImpact(const FVector& WorldImpactPoint, float BaseStrain, float Radius)
 {
 	if (MonsterState != EWaxMonsterState::Active || Radius <= 0.0f)
