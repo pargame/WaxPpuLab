@@ -45,3 +45,6 @@ Content/Collections/
 .claude/
 .collab/
 .gemini/
+
+# Raw third-party source art (license: no redistribution)
+SourceArt/
