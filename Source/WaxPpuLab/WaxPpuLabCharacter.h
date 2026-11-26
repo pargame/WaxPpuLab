@@ -5,14 +5,14 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "Logging/LogMacros.h"
+#include "WaxCombatFlowInterface.h"
 #include "WaxPpuLabCharacter.generated.h"
 
 class UInputComponent;
 class USkeletalMeshComponent;
 class UCameraComponent;
-class UMaterialParameterCollection;
 class UInputAction;
-class UAnimMontage;
+class UWaxCombatComponent;
 class AWaxMonsterBase;
 struct FInputActionValue;
 
@@ -22,7 +22,7 @@ DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
  *  A basic first person character
  */
 UCLASS(abstract)
-class AWaxPpuLabCharacter : public ACharacter
+class AWaxPpuLabCharacter : public ACharacter, public IWaxCombatFlowInterface
 {
 	GENERATED_BODY()
 
@@ -33,6 +33,10 @@ class AWaxPpuLabCharacter : public ACharacter
 	/** First person camera */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	UCameraComponent* FirstPersonCameraComponent;
+
+	/** 공격 세부 논리 (입력 버퍼·단계 FSM·판정·회전 제한) */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UWaxCombatComponent> CombatComponent;
 
 protected:
 
@@ -52,7 +56,7 @@ protected:
 	UPROPERTY(EditAnywhere, Category ="Input")
 	class UInputAction* MouseLookAction;
 
-	/** 펀치·파괴 입력 액션 (길게 누르기 연타는 IA 에셋의 Pulse 트리거로 제어) */
+	/** 기본공격 입력 액션. Started=누름, Completed/Canceled=뗌 (홀드 연타는 Combat 컴포넌트가 상태로 처리) */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> CrackAction;
 
@@ -78,17 +82,17 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 
-	UFUNCTION(BlueprintCallable, Category="WaxDemo|Punch")
-	void RequestPunch();
-
-	UFUNCTION(BlueprintCallable, Category="WaxDemo|Punch")
-	void HandlePunchImpactNotify(FName ImpactBoneName, float StrainScale = 1.0f, float RadiusScale = 1.0f);
-
 	UFUNCTION(BlueprintCallable, Category="WaxDemo")
 	void SpawnDemoWaxBallInFront();
 
 	UFUNCTION(BlueprintCallable, Category="WaxDemo|Camera")
 	void ToggleThirdPersonPreview();
+
+	UFUNCTION(BlueprintCallable, Category="WaxDemo|Camera")
+	void SetThirdPersonPreview(bool bEnable);
+
+	UFUNCTION(BlueprintPure, Category="WaxDemo|Camera")
+	bool IsThirdPersonPreview() const { return bThirdPersonPreview; }
 
 	UFUNCTION(BlueprintPure, Category="WaxDemo|UpperBody")
 	float GetAimPitch() const { return SmoothedAimPitch; }
@@ -105,61 +109,15 @@ public:
 	UFUNCTION(Exec, Category="WaxDemo|Audio")
 	void SetWaxAudioPreset(int32 PresetIndex);
 
-	/** 기본 타격 구 반경 (cm). 키우면 한 번에 파괴되는 왁스 범위가 넓어짐 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|Impact", meta = (ClampMin = "5.0"))
-	float WaxImpactRadius = 75.0f;
+	/** 개발용: 슬롯(Basic/AerialStrike/Slam/Kick)의 타격 프레임 전후를 3인칭으로 정지 캡처. 커맨드라인 -WaxCapture=<Slot> [-WaxCaptureQuit]도 지원 */
+	UFUNCTION(Exec, Category="WaxDemo|Combat")
+	void WaxAttackCapture(const FString& SlotName, int32 bQuitWhenDone = 0);
 
-	/** 기본 파괴 충격량 (Chaos Strain). 높일수록 단단한 왁스도 쉽게 부서짐 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|Impact", meta = (ClampMin = "1000.0"))
-	float WaxImpactStrain = 320000.0f;
+	UWaxCombatComponent* GetCombatComponent() const { return CombatComponent; }
 
-	/** 순환 재생할 펀치 애님 몽타주 목록 */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="WaxDemo|Punch")
-	TArray<TObjectPtr<UAnimMontage>> PunchMontages;
-
-	/** 펀치 몽타주 재생 속도 배율. 높일수록 스윙이 빨라짐 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|Punch", meta = (ClampMin = "0.1"))
-	float PunchPlayRate = 1.65f;
-
-	/** 다음 펀치 입력까지 최소 대기 시간 (초). 줄이면 연타 간격이 짧아짐 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|Punch", meta = (ClampMin = "0.05"))
-	float PunchCooldownSec = 0.34f;
-
-	/** 주먹 본 위치에서 시선 전방으로 밀어낼 타격 중심 오프셋 (cm). 키우면 리치가 길어짐 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|Punch", meta = (ClampMin = "0.0"))
-	float PunchBoneForwardOffset = 18.0f;
-
-	/** 펀치 타격 표면 마커 파라미터를 전달할 Material Parameter Collection 에셋 */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="WaxDemo|PunchMarker")
-	TObjectPtr<UMaterialParameterCollection> TargetingMPC;
-
-	/** 펀치 타격 시 왁스 표면에 빨강 원형 마커(MPC) 표시 여부 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|PunchMarker")
-	bool bShowPunchImpactMarker = true;
-
-	/** 펀치 타격 시 실제 판정 구 디버그 와이어프레임 표시 여부 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|PunchMarker")
-	bool bShowDebugPunchImpact = false;
-
-	/** 펀치 타격 마커 및 디버그 구 색상 (Linear RGB) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|PunchMarker", meta = (EditCondition = "bShowPunchImpactMarker || bShowDebugPunchImpact"))
-	FLinearColor PunchMarkerColor = FLinearColor(1.0f, 0.01f, 0.01f, 1.0f);
-
-	/** 펀치 타격 마커 유지 시간 (초). 키우면 타격 범위가 더 오래 남음 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|PunchMarker", meta = (ClampMin = "0.05", EditCondition = "bShowPunchImpactMarker || bShowDebugPunchImpact"))
-	float PunchMarkerDurationSec = 0.35f;
-
-	/** 펀치 표면 마커 발광 배율. 높일수록 어두운 배경에서 더 선명하게 빛남 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|PunchMarker", meta = (ClampMin = "0.0", EditCondition = "bShowPunchImpactMarker"))
-	float PunchMarkerEmissiveBoost = 8.0f;
-
-	/** 펀치 표면 마커 불투명도 (0~1). 낮출수록 반투명해짐 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|PunchMarker", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "bShowPunchImpactMarker"))
-	float PunchMarkerOpacity = 1.0f;
-
-	/** 펀치 표면 마커 외곽 페더링 강도. 클수록 경계가 부드럽게 번짐 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|PunchMarker", meta = (ClampMin = "0.1", EditCondition = "bShowPunchImpactMarker"))
-	float PunchMarkerEdgeSoftness = 0.45f;
+	virtual int32 SelectAttackMontage_Implementation(EWaxAttackSlot Slot, const FWaxAttackSpec& Spec, int32 ComboIndex) override;
+	virtual bool CanExecuteAttack_Implementation(EWaxAttackSlot Slot) override;
+	virtual FWaxRotationProfile ResolveRotationProfile_Implementation(EWaxAttackSlot Slot, EWaxAttackPhase Phase, const FWaxRotationProfile& DefaultProfile) override;
 
 	/** 캡슐 기준 1인칭 카메라 기본 상대 위치 (cm, X: 전후, Y: 좌우, Z: 높이) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|Camera")
@@ -246,19 +204,15 @@ public:
 	float WaxSpawnDistance = 260.0f;
 
 private:
-	void ExecuteWaxImpactAtLocation(const FVector& ImpactCenter, float Strain, float Radius);
-	void SetPunchMarkerVisible(bool bVisible, const FVector& ImpactCenter = FVector::ZeroVector, float Radius = 0.0f);
-	void UpdatePunchMarker(double Now);
+	void OnAttackInputStarted();
+	void OnAttackInputReleased();
+	void TryStartCommandLineCapture();
 	void ApplyCameraViewMode();
 	void UpdateFirstPersonCamera(float DeltaTime);
 	void UpdateUpperBodyAimPitch(float DeltaTime);
 	void UpdateDebrisKick();
 
 	int32 SelectedMonsterIndex = 0;
-	int32 NextPunchIndex = 0;
-	double LastPunchStartTime = -10.0;
-	bool bPunchMarkerActive = false;
-	double PunchMarkerExpireTime = -1.0;
 	float SmoothedAimPitch = 0.0f;
 	FVector CachedHeadRefLocal = FVector::ZeroVector;
 	bool bHasCachedHeadRef = false;

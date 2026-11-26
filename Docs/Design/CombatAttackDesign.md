@@ -1,6 +1,6 @@
 # 공격 시스템 설계 (기본공격 · 점프공격 · 밀어내기 발차기)
 
-상태: **설계 확정** (Claude–Gemini 2회 협업 검토 반영, 구현 착수 전)
+상태: **P0 완료** (설계: Claude–Gemini 2회 협업 검토 반영) · 다음 P0.5 회전 제한
 
 ## 1. 확정된 결정
 
@@ -55,7 +55,7 @@ Montage ─ UWaxAttackHitNotify    (UWaxPunchAnimNotify 일반화, CoreRedirect�
 - **슬램 섹션**: `Start → Loop → Land`. 캐릭터 `LandedDelegate`를 Combat이 구독해서 `Montage_JumpToSection("Land")`를 호출하고, Land의 HitNotify가 발밑 광역 판정을 냄.
 - **몬스터 넉백**: `AWaxMonsterBase::ReceiveKnockback`이 `LaunchCharacter` + `Locomotion->SuspendFor(Duration)` 호출. `SuspendFor` 동안 로코모션 틱 전체 정지, 버터는 재개 시 `HopAlign`부터 재진입.
 - **타격 원점**: 항상 몸 메시(`GetMesh()`) 본/소켓 또는 몸 메시에 부착된 무기 메시 소켓. 무기 메시는 FP 메시·몸 메시 양쪽에 부착(가시성용), 판정은 몸 쪽만.
-- **AGENTS.md 준수**: `/Game/` 하드코딩 0건, 수치는 전부 DA/UPROPERTY, 런타임 복사 필드는 `VisibleInstanceOnly`.
+- **[ProjectGuide](../ProjectGuide.md) 준수**: `/Game/` 하드코딩 0건, 수치는 전부 DA/UPROPERTY, 런타임 복사 필드는 `VisibleInstanceOnly`.
 
 ### C++ / BP / 에셋 책임 분리
 
@@ -146,21 +146,30 @@ Montage ─ UWaxAttackHitNotify    (UWaxPunchAnimNotify 일반화, CoreRedirect�
 | 한 줄 코멘트 | 자유 |
 - 테스트 후 에디터만 종료하면 AI가 `LogWaxCombat`을 읽어 체감 점수와 수치를 대조.
 
-**H4. 에디터 켜기/끄기**: 헤더·`.uproject` 변경 빌드 시 AI가 요청(AGENTS.md §2 절차).
+에디터 종료·재실행은 `unreal-engine` 스킬의 재시작 절차에 따라 AI가 직접 수행하며 사람에게 요청하지 않는다.
 
 ## 5. 단계 계획 (단계별 통과 시 커밋, 코드/에셋 커밋 분리)
 
 | 단계 | 내용 | AI 검증 | 사람 | 통과 기준 |
 |---|---|---|---|---|
-| P0 기반 | Python·EditorScriptingUtilities 활성화(에디터 전용), Combat 컴포넌트(입력 버퍼·단계 FSM·회전 제한 구조·이벤트), 캐릭터 흐름 훅, AttackSet DA, `AttackHit`/`Active`/`CancelWindow`/`RotationProfile` Notify, IA_WaxCrack Pulse 제거, ABP 슬롯 분리, 펀치 이전, 판정 원점 몸 메시 통일, DoMove Control Yaw 기준, 캡처 Exec | 빌드, 헤드리스 검증 스크립트 동작, 펀치 노티파이 호환, 판정 위치 디버그 구 비교, 캡처 성공 | H0, H4, H3(펀치 회귀만) | 펀치 체감 변화 없음, 판정 위치 동일, 검증 스크립트 PASS (회전 제한 기본값 = 무제한) |
+| P0 기반 | Python·EditorScriptingUtilities 활성화(에디터 전용), Combat 컴포넌트(입력 버퍼·단계 FSM·회전 제한 구조·이벤트), 캐릭터 흐름 훅, AttackSet DA, `AttackHit`/`Active`/`CancelWindow`/`RotationProfile` Notify, IA_WaxCrack Pulse 제거, 펀치 이전, 판정 원점 몸 메시 통일, DoMove Control Yaw 기준, 캡처 Exec | 빌드, 헤드리스 검증 스크립트 동작, 펀치 노티파이 호환, 판정 위치 디버그 구 비교, 캡처 성공 | H0, H3(펀치 회귀만) | 펀치 체감 변화 없음, 판정 위치 동일, 검증 스크립트 PASS (회전 제한 기본값 = 무제한) |
 | P0.5 회전 제한 | 단계별 회전 프로파일 활성화, 소프트 클램프 튜닝 | 로그(몸·카메라 오프셋 최대치, 실효 감도) | H3(회전 문항 포함) | 회전 문항 '적당', 경계 고착 0회 |
-| P1 발차기 | IA_WaxKick, 리타겟, AM_Kick(FullBody), 몬스터 넉백 API(`ReceiveKnockback`·`SuspendFor`), 파편 임펄스 | 후보 선별, 프레임 제안, 캡처, 로그(넉백 속도·대상 수) | H1, H2, H3 | H3 평균 ≥4, 씹힘 없음, 넉백이 로코모션에 상쇄되지 않음 |
+| P1 발차기 | IA_WaxKick, 리타겟, ABP 슬롯 분리(UpperBody/FullBody, 펀치 몽타주 UpperBody 이전, 검증 스크립트 슬롯명 규칙 추가), AM_Kick(FullBody), 몬스터 넉백 API(`ReceiveKnockback`·`SuspendFor`), 파편 임펄스 | 후보 선별, 프레임 제안, 캡처, 로그(넉백 속도·대상 수) | H1, H2, H3 | H3 평균 ≥4, 씹힘 없음, 넉백이 로코모션에 상쇄되지 않음 |
 | P2 점프공격 | 탭/홀드 판정, 공중 강타, 슬램 섹션, 높이 폴백 | 점프 최고점 실측 후 `SlamMinHeight` 결정, 캡처, 로그 | H2, H3 | 탭/홀드 오판 0회(10회 시도), 지상 홀드 후 점프 시 슬램 미발동 |
 | P3 무기 스왑 골격 | `UWaxWeaponDataAsset`(①·`FWaxJumpAttackSpec` 오버라이드), 더미 무기 DA(엔진 기본 메시 + 소켓, ①·② 수치만 변경), FP·몸 메시 양쪽 부착, 장착 토글 개발키 | 슬롯 해석 로그, 무기 소켓 원점 디버그 구 | H3(스왑 전후 비교) | ①·②만 바뀌고 ③ 동일, 타격 원점이 무기 소켓 |
 
 실제 무기 메시·전용 애니는 P3 이후 별도 트랙.
 
-## 6. 리스크
+## 6. 구현 메모 (P0)
+
+- 펀치 템포 기준값: 몽타주 1.0s, 타격 R 0.414 / L 0.483, PlayRate 1.65. 기존 홀드 연타 실측 간격 0.40s(Pulse 0.08s × 쿨다운 0.34s 정렬) → CancelWindow 시작 0.66(몽타주 시간)으로 일치.
+- 소비 시점은 Press / CancelWindow / AttackEnd만. Tick은 버퍼 만료·상태 무효화·낙하 시 홀드 무효화만 수행.
+- 이전 공격 이벤트 차단: 노티파이는 `FAnimNotifyMontageInstanceContext`의 인스턴스 ID 일치만 인정, 블렌드아웃 델리게이트는 `AttackSerial` 페이로드로 거름.
+- 몸 메시 `VisibilityBasedAnimTickOption = AlwaysTickPoseAndRefreshBones`(1인칭에서 숨겨져도 판정 소켓 갱신).
+- 회전 보정은 현재 Tick에서 ControlRotation 델타를 재스케일하는 방식. P0.5 착수 시 `DoAim` 입력 단계 필터로 옮길지 재검토(입력 축 스케일 부호 확인 필요).
+- 도구: `Scripts/validate_attacks.py`(헤드리스 검증), `-game -WaxCapture=<Slot> -WaxCaptureQuit`(측면 고정 시점 정지 캡처, `CaptureViewYawOffsetDeg`/`CaptureViewPitchDeg`), `Scripts/contact_sheet.py`.
+
+## 7. 리스크
 
 - **FirstPersonScale 0.6**: 다리가 보이면 카메라 쪽으로 축소·왜곡될 수 있음 → H0 결과에 따라 하체 HideBone 또는 FP 스케일 예외 처리 검토.
 - **Mixamo 리타겟 품질**: 손가락·루트 이슈 가능 → 루트 트랙 제거, 루트모션 OFF, 본 오차 수치로 후보 선별.

@@ -2,7 +2,6 @@
 
 #include "WaxPpuLabCharacter.h"
 #include "Animation/AnimInstance.h"
-#include "Animation/AnimMontage.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -13,8 +12,9 @@
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "Materials/MaterialParameterCollection.h"
-#include "Materials/MaterialParameterCollectionInstance.h"
+#include "Misc/CommandLine.h"
+#include "TimerManager.h"
+#include "WaxCombatComponent.h"
 #include "WaxDestructibleComponent.h"
 #include "WaxMonsterBase.h"
 #include "WaxMonsterDataAsset.h"
@@ -34,6 +34,8 @@ AWaxPpuLabCharacter::AWaxPpuLabCharacter()
 	FirstPersonMesh->FirstPersonPrimitiveType = EFirstPersonPrimitiveType::FirstPerson;
 	FirstPersonMesh->SetCollisionProfileName(FName("NoCollision"));
 
+	CombatComponent = CreateDefaultSubobject<UWaxCombatComponent>(TEXT("CombatComponent"));
+
 	// Create the Camera Component	
 	FirstPersonCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("First Person Camera"));
 	FirstPersonCameraComponent->SetupAttachment(GetCapsuleComponent());
@@ -46,6 +48,8 @@ AWaxPpuLabCharacter::AWaxPpuLabCharacter()
 
 	// configure the character comps
 	GetMesh()->SetOwnerNoSee(true);
+	// 1인칭에서 안 보여도 판정 소켓·FP 포즈 복사를 위해 본 갱신 유지
+	GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 	GetMesh()->FirstPersonPrimitiveType = EFirstPersonPrimitiveType::WorldSpaceRepresentation;
 
 	GetCapsuleComponent()->SetCapsuleSize(34.0f, 96.0f);
@@ -74,7 +78,9 @@ void AWaxPpuLabCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInput
 		// Wax Actions
 		if (CrackAction)
 		{
-			EnhancedInputComponent->BindAction(CrackAction, ETriggerEvent::Triggered, this, &AWaxPpuLabCharacter::RequestPunch);
+			EnhancedInputComponent->BindAction(CrackAction, ETriggerEvent::Started, this, &AWaxPpuLabCharacter::OnAttackInputStarted);
+			EnhancedInputComponent->BindAction(CrackAction, ETriggerEvent::Completed, this, &AWaxPpuLabCharacter::OnAttackInputReleased);
+			EnhancedInputComponent->BindAction(CrackAction, ETriggerEvent::Canceled, this, &AWaxPpuLabCharacter::OnAttackInputReleased);
 		}
 		if (SpawnTestMonsterAction)
 		{
@@ -165,9 +171,10 @@ void AWaxPpuLabCharacter::DoMove(float Right, float Forward)
 {
 	if (GetController())
 	{
-		// pass the move inputs
-		AddMovementInput(GetActorRightVector(), Right);
-		AddMovementInput(GetActorForwardVector(), Forward);
+		// 공격 중 몸 Yaw가 시선보다 늦을 수 있으므로 이동은 항상 시선(Control Yaw) 기준
+		const FRotator YawRotation(0.0f, GetControlRotation().Yaw, 0.0f);
+		AddMovementInput(FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y), Right);
+		AddMovementInput(FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X), Forward);
 	}
 }
 
@@ -233,10 +240,7 @@ void AWaxPpuLabCharacter::BeginPlay()
 	Super::BeginPlay();
 
 	bHasCachedHeadRef = false;
-	bPunchMarkerActive = false;
-	PunchMarkerExpireTime = -1.0;
 	SmoothedAimPitch = 0.0f;
-	SetPunchMarkerVisible(false);
 
 	if (FirstPersonCameraComponent)
 	{
@@ -248,6 +252,16 @@ void AWaxPpuLabCharacter::BeginPlay()
 	}
 
 	ApplyCameraViewMode();
+	TryStartCommandLineCapture();
+}
+
+void AWaxPpuLabCharacter::SetThirdPersonPreview(bool bEnable)
+{
+	if (bThirdPersonPreview != bEnable)
+	{
+		bThirdPersonPreview = bEnable;
+		ApplyCameraViewMode();
+	}
 }
 
 void AWaxPpuLabCharacter::ToggleThirdPersonPreview()
@@ -277,45 +291,6 @@ void AWaxPpuLabCharacter::ApplyCameraViewMode()
 	}
 }
 
-void AWaxPpuLabCharacter::SetPunchMarkerVisible(bool bVisible, const FVector& ImpactCenter, float Radius)
-{
-	bPunchMarkerActive = bVisible;
-	if (!TargetingMPC || !GetWorld())
-	{
-		return;
-	}
-
-	if (UMaterialParameterCollectionInstance* MPCInst = GetWorld()->GetParameterCollectionInstance(TargetingMPC))
-	{
-		if (bVisible)
-		{
-			MPCInst->SetVectorParameterValue(TEXT("TargetSphereCenter"), FLinearColor(ImpactCenter.X, ImpactCenter.Y, ImpactCenter.Z, 1.0f));
-			MPCInst->SetScalarParameterValue(TEXT("TargetSphereRadius"), Radius);
-			MPCInst->SetVectorParameterValue(TEXT("MarkerColor"), PunchMarkerColor);
-			MPCInst->SetScalarParameterValue(TEXT("EmissiveBoost"), PunchMarkerEmissiveBoost);
-			MPCInst->SetScalarParameterValue(TEXT("MarkerOpacity"), PunchMarkerOpacity);
-			MPCInst->SetScalarParameterValue(TEXT("EdgeSoftness"), PunchMarkerEdgeSoftness);
-		}
-		else
-		{
-			MPCInst->SetScalarParameterValue(TEXT("MarkerOpacity"), 0.0f);
-		}
-	}
-}
-
-void AWaxPpuLabCharacter::UpdatePunchMarker(double Now)
-{
-	if (!bPunchMarkerActive)
-	{
-		return;
-	}
-
-	if (!bShowPunchImpactMarker || Now >= PunchMarkerExpireTime)
-	{
-		SetPunchMarkerVisible(false);
-	}
-}
-
 void AWaxPpuLabCharacter::UpdateFirstPersonCamera(float DeltaTime)
 {
 	if (!FirstPersonCameraComponent)
@@ -329,7 +304,7 @@ void AWaxPpuLabCharacter::UpdateFirstPersonCamera(float DeltaTime)
 		const FRotator LocalControlRot = (GetControlRotation() - GetActorRotation()).GetNormalized();
 		TargetLoc += LocalControlRot.RotateVector(ThirdPersonPreviewOffset);
 	}
-	else if (HeadFollowAlpha > KINDA_SMALL_NUMBER && FirstPersonMesh && !HeadSocketName.IsNone() && FirstPersonMesh->DoesSocketExist(HeadSocketName))
+	else if (HeadFollowAlpha > KINDA_SMALL_NUMBER && !(CombatComponent && CombatComponent->ShouldSuppressHeadFollow()) && FirstPersonMesh && !HeadSocketName.IsNone() && FirstPersonMesh->DoesSocketExist(HeadSocketName))
 	{
 		const FVector HeadWorld = FirstPersonMesh->GetSocketLocation(HeadSocketName);
 		const FVector HeadLocal = GetActorTransform().InverseTransformPosition(HeadWorld);
@@ -358,9 +333,17 @@ void AWaxPpuLabCharacter::UpdateUpperBodyAimPitch(float DeltaTime)
 		? FMath::Clamp(RawPitch, -MaxUpperBodyPitchDeg, MaxUpperBodyPitchDeg)
 		: 0.0f;
 
-	SmoothedAimPitch = (AimPitchInterpSpeed > KINDA_SMALL_NUMBER)
+	float NewPitch = (AimPitchInterpSpeed > KINDA_SMALL_NUMBER)
 		? FMath::FInterpTo(SmoothedAimPitch, TargetPitch, DeltaTime, AimPitchInterpSpeed)
 		: TargetPitch;
+
+	const float PitchRateLimit = CombatComponent ? CombatComponent->GetPitchRateLimit() : 0.0f;
+	if (PitchRateLimit > 0.0f)
+	{
+		const float MaxStep = PitchRateLimit * DeltaTime;
+		NewPitch = SmoothedAimPitch + FMath::Clamp(NewPitch - SmoothedAimPitch, -MaxStep, MaxStep);
+	}
+	SmoothedAimPitch = NewPitch;
 }
 
 void AWaxPpuLabCharacter::Tick(float DeltaTime)
@@ -370,146 +353,7 @@ void AWaxPpuLabCharacter::Tick(float DeltaTime)
 	UpdateFirstPersonCamera(DeltaTime);
 	UpdateUpperBodyAimPitch(DeltaTime);
 
-	if (GetWorld())
-	{
-		UpdatePunchMarker(GetWorld()->GetTimeSeconds());
-	}
-
 	UpdateDebrisKick();
-}
-
-void AWaxPpuLabCharacter::RequestPunch()
-{
-	UWorld* World = GetWorld();
-	if (!World)
-	{
-		return;
-	}
-
-	if (PunchMontages.Num() == 0)
-	{
-		UE_LOG(LogWaxPpuLab, Warning, TEXT("'%s' RequestPunch skipped: PunchMontages is empty."), *GetNameSafe(this));
-		return;
-	}
-
-	const double Now = World->GetTimeSeconds();
-	if (Now - LastPunchStartTime < static_cast<double>(PunchCooldownSec))
-	{
-		return;
-	}
-
-	USkeletalMeshComponent* AnimMesh = GetMesh();
-	UAnimInstance* AnimInst = AnimMesh ? AnimMesh->GetAnimInstance() : nullptr;
-	if (!AnimInst)
-	{
-		UE_LOG(LogWaxPpuLab, Warning, TEXT("'%s' RequestPunch skipped: AnimInstance is null."), *GetNameSafe(this));
-		return;
-	}
-
-	UAnimMontage* MontageToPlay = PunchMontages[NextPunchIndex % PunchMontages.Num()];
-	NextPunchIndex = (NextPunchIndex + 1) % PunchMontages.Num();
-	if (!MontageToPlay)
-	{
-		UE_LOG(LogWaxPpuLab, Warning, TEXT("'%s' RequestPunch skipped: selected PunchMontage is null."), *GetNameSafe(this));
-		return;
-	}
-
-	if (AnimInst->Montage_Play(MontageToPlay, PunchPlayRate) <= 0.0f)
-	{
-		UE_LOG(LogWaxPpuLab, Warning, TEXT("'%s' RequestPunch skipped: Montage_Play failed for '%s'."), *GetNameSafe(this), *GetNameSafe(MontageToPlay));
-		return;
-	}
-
-	LastPunchStartTime = Now;
-}
-
-void AWaxPpuLabCharacter::HandlePunchImpactNotify(FName ImpactBoneName, float StrainScale, float RadiusScale)
-{
-	UWorld* World = GetWorld();
-	if (!World)
-	{
-		return;
-	}
-
-	USkeletalMeshComponent* SourceMesh = nullptr;
-	if (!ImpactBoneName.IsNone())
-	{
-		if (FirstPersonMesh && FirstPersonMesh->DoesSocketExist(ImpactBoneName))
-		{
-			SourceMesh = FirstPersonMesh;
-		}
-		else if (GetMesh() && GetMesh()->DoesSocketExist(ImpactBoneName))
-		{
-			SourceMesh = GetMesh();
-		}
-	}
-
-	if (!SourceMesh)
-	{
-		UE_LOG(LogWaxPpuLab, Warning, TEXT("'%s' HandlePunchImpactNotify skipped: socket/bone '%s' not found."), *GetNameSafe(this), *ImpactBoneName.ToString());
-		return;
-	}
-
-	const FVector ForwardDir = FirstPersonCameraComponent
-		? FirstPersonCameraComponent->GetForwardVector()
-		: GetActorForwardVector();
-	const FVector ImpactCenter = SourceMesh->GetSocketLocation(ImpactBoneName) + ForwardDir * PunchBoneForwardOffset;
-
-	const float FinalStrain = WaxImpactStrain * FMath::Max(0.1f, StrainScale);
-	const float FinalRadius = WaxImpactRadius * FMath::Max(0.1f, RadiusScale);
-
-	if (bShowPunchImpactMarker)
-	{
-		SetPunchMarkerVisible(true, ImpactCenter, FinalRadius);
-		PunchMarkerExpireTime = World->GetTimeSeconds() + static_cast<double>(PunchMarkerDurationSec);
-	}
-	else if (bPunchMarkerActive)
-	{
-		SetPunchMarkerVisible(false);
-	}
-
-	if (bShowDebugPunchImpact)
-	{
-		DrawDebugSphere(World, ImpactCenter, FinalRadius, 16, PunchMarkerColor.ToFColor(true), false, PunchMarkerDurationSec, 0, 1.5f);
-	}
-
-	ExecuteWaxImpactAtLocation(ImpactCenter, FinalStrain, FinalRadius);
-}
-
-void AWaxPpuLabCharacter::ExecuteWaxImpactAtLocation(const FVector& ImpactCenter, float Strain, float Radius)
-{
-	if (!GetWorld())
-	{
-		return;
-	}
-
-	TArray<FOverlapResult> Overlaps;
-	FCollisionQueryParams Params(SCENE_QUERY_STAT(WaxCrackSphere), false, this);
-	if (GetWorld()->OverlapMultiByChannel(Overlaps, ImpactCenter, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(Radius), Params))
-	{
-		TSet<AActor*> CheckedActors;
-		for (const FOverlapResult& Overlap : Overlaps)
-		{
-			AActor* HitActor = Overlap.GetActor();
-			if (!HitActor || CheckedActors.Contains(HitActor))
-			{
-				continue;
-			}
-			CheckedActors.Add(HitActor);
-
-			if (AWaxMonsterBase* Monster = Cast<AWaxMonsterBase>(HitActor))
-			{
-				Monster->ReceiveWaxImpact(ImpactCenter, Strain, Radius);
-			}
-			else if (UWaxDestructibleComponent* Destructible = HitActor->FindComponentByClass<UWaxDestructibleComponent>())
-			{
-				if (!Destructible->HasCollapsed())
-				{
-					Destructible->ApplyWaxImpact(ImpactCenter, Strain, Radius);
-				}
-			}
-		}
-	}
 }
 
 void AWaxPpuLabCharacter::SetWaxAudioPreset(int32 PresetIndex)
@@ -575,4 +419,74 @@ void AWaxPpuLabCharacter::SpawnDemoWaxBallInFront()
 			Spawned->WaxDestructible->SelectDevAudioProfile(ActivePreset - 1);
 		}
 	}
+}
+
+void AWaxPpuLabCharacter::OnAttackInputStarted()
+{
+	if (CombatComponent)
+	{
+		CombatComponent->SetAttackHeld(true);
+		CombatComponent->PressAttackInput(EWaxAttackSlot::Basic);
+	}
+}
+
+void AWaxPpuLabCharacter::OnAttackInputReleased()
+{
+	if (CombatComponent)
+	{
+		CombatComponent->SetAttackHeld(false);
+	}
+}
+
+int32 AWaxPpuLabCharacter::SelectAttackMontage_Implementation(EWaxAttackSlot Slot, const FWaxAttackSpec& Spec, int32 ComboIndex)
+{
+	return ComboIndex;
+}
+
+bool AWaxPpuLabCharacter::CanExecuteAttack_Implementation(EWaxAttackSlot Slot)
+{
+	return true;
+}
+
+FWaxRotationProfile AWaxPpuLabCharacter::ResolveRotationProfile_Implementation(EWaxAttackSlot Slot, EWaxAttackPhase Phase, const FWaxRotationProfile& DefaultProfile)
+{
+	return DefaultProfile;
+}
+
+static bool ParseAttackSlot(const FString& Name, EWaxAttackSlot& OutSlot)
+{
+	const UEnum* SlotEnum = StaticEnum<EWaxAttackSlot>();
+	const int64 Value = SlotEnum ? SlotEnum->GetValueByNameString(Name) : INDEX_NONE;
+	if (Value == INDEX_NONE || Value == static_cast<int64>(EWaxAttackSlot::None))
+	{
+		return false;
+	}
+	OutSlot = static_cast<EWaxAttackSlot>(Value);
+	return true;
+}
+
+void AWaxPpuLabCharacter::WaxAttackCapture(const FString& SlotName, int32 bQuitWhenDone)
+{
+	EWaxAttackSlot Slot = EWaxAttackSlot::None;
+	if (!CombatComponent || !ParseAttackSlot(SlotName, Slot))
+	{
+		UE_LOG(LogWaxPpuLab, Warning, TEXT("WaxAttackCapture: unknown slot '%s' (Basic/AerialStrike/Slam/Kick)"), *SlotName);
+		return;
+	}
+	CombatComponent->StartCapture(Slot, bQuitWhenDone != 0);
+}
+
+void AWaxPpuLabCharacter::TryStartCommandLineCapture()
+{
+	FString SlotName;
+	if (!FParse::Value(FCommandLine::Get(), TEXT("WaxCapture="), SlotName) || !GetWorld())
+	{
+		return;
+	}
+	const bool bQuit = FParse::Param(FCommandLine::Get(), TEXT("WaxCaptureQuit"));
+	FTimerHandle Handle;
+	GetWorldTimerManager().SetTimer(Handle, FTimerDelegate::CreateWeakLambda(this, [this, SlotName, bQuit]()
+	{
+		WaxAttackCapture(SlotName, bQuit ? 1 : 0);
+	}), 1.5f, false);
 }
