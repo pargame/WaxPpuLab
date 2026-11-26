@@ -185,7 +185,8 @@ Montage ─ UWaxAttackHitNotify    (UWaxPunchAnimNotify 일반화, CoreRedirect�
 
 - Mixamo `Punch Combo`(30fps, 66프레임)를 `RTG_Mixamo_To_Manny`(IK Rig 자동 생성·체인 퍼지 매핑)로 Manny에 리타겟 → `AS_MX_PunchCombo`.
 - 손 궤적 분석으로 타격 4회 확인: L 18, R 26, L 33, R 41프레임(최대 신전). 발은 왼발 앞(오소독스).
-- 4구간으로 잘라 `AM_MX_Punch_1~4`(L·R·L·R) 생성, `Basic.Montages`가 순환. 구간 10–22 / 22–30 / 30–37 / 37–52, Active = 타격 −3~+1프레임, CancelWindow = 구간 끝 2프레임(4번만 46–52).
+- 3구간으로 잘라 `AM_MX_Punch_1~3` 생성: 1 = 대기 자세에서 시작하는 첫 잽(10–22), 2 = R(22–30), 3 = L(30–37). `Basic.ComboLoopStartIndex = 1`로 첫 타 이후 2·3이 끊김 없이 무한 반복(연속 콤보). Active = 타격 −3~+1프레임, CancelWindow = 구간 끝 2프레임.
+- 리타겟 기준 자세: 소스 정렬 시 Manny 손가락 기본 굽힘이 더해져 관절당 약 20° 과굴곡(주먹 기형) → 소스 자세 초기화 + 타깃(Manny) `auto_align_all_bones`로 해결(검지 굽힘 원본 44/88° ↔ 결과 42/93°, 팔 궤적 변화 1cm 이내).
 - 원본 템포 그대로 쓰기 위해 `Basic.PlayRate` 1.65 → 1.0. 슬롯은 아직 `DefaultSlot`(상·하체 슬롯 분리는 P1).
 - Mixamo 파생 에셋은 공개 저장소에 커밋하기로 결정(주인 승인).
 
