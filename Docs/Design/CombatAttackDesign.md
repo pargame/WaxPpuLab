@@ -176,7 +176,7 @@ Montage ─ UWaxAttackHitNotify    (UWaxPunchAnimNotify 일반화, CoreRedirect�
 - 로그 `WaxRot Session`: 연속 공격 묶음(첫 공격 ~ 몸 정렬 완료) 단위로 `maxYawOff`·`maxPitchOff`·`minSens`·`boundaryFrames`(바깥 입력이 경계에서 완전히 막힌 프레임)·`recover`·`stuck` 기록. `recover > RotationStuckWarnSec`(1.0s)이면 고착.
 - 자동 검증(PIE, Python으로 공격 홀드 + 시점 입력 주입): 약한 회전 maxYawOff 14.7 / 강한 플릭 39.1(≤45), maxPitchOff ≤25, recover 0.2s, stuck 0.
 - 자동 검증 한계: 에디터 창이 포커스를 잃으면 백그라운드 절전으로 PIE가 3~4fps로 떨어져 회전 수치가 의미를 잃음(몸이 매 프레임 따라잡아 오프셋 0). 회전·이동 체감 측정은 사람이 포그라운드에서 수행(H3).
-- 공격 중 이동 제한(`FWaxMovementProfile`)은 `UpdateMovementLimit`에서 공격 시작 시점의 `MaxWalkSpeed`를 기준으로 배율 적용. 세션 로그 `minMove`로 확인.
+- 공격 중 이동 제한(`FWaxMovementProfile`)은 `UpdateMovementLimit`에서 BeginPlay 때 읽은 `MaxWalkSpeed`를 기준으로 배율 적용. 세션 로그 `minMove`로 확인.
 
 ## 8. 리스크
 
