@@ -80,6 +80,7 @@ Montage ─ UWaxAttackHitNotify    (UWaxPunchAnimNotify 일반화, CoreRedirect�
   - 폴백: 커브가 null이면 선형(1 - t), `MaxOffset <= 0`이면 오프셋 제한 없음.
   - 감도 변화는 `SensitivityBlendSpeed`로 블렌드.
 - **이동**: `DoMove`는 Control Yaw 기준(항상 시선 기준 이동).
+- **공격 중 이동 제한**: `FWaxMovementProfile = {ForwardSpeedScale, StrafeSpeedScale, BackwardSpeedScale, bAllowJump}`를 Spec의 단계별(`Windup/Active/RecoveryMovement`) 기본값으로 둔다. 속도 배율은 **몸 정면 기준 입력 방향**으로 섞고(앞·뒤 배율 × X² + 옆 배율 × Y²), `MaxWalkSpeed`에 곱한다. 전환은 `MoveScaleBlendSpeed`로 블렌드. 초기값은 전부 1.0(제한 없음), H3로 튜닝.
 - **타격 방향**: 카메라 전방이 아니라 몸 Yaw + 상반신 Pitch로 산출(보이는 팔과 판정 방향 일치).
 - **프로파일**: `FWaxRotationProfile = {MaxYawRateDegPerSec, MaxPitchRateDegPerSec, MaxBodyCameraYawOffsetDeg, MaxBodyCameraPitchOffsetDeg, CameraSensitivityScale}`. 해석 순서: `RotationProfile` NotifyState 오버라이드 → DA 단계별 기본값 → 비공격 시 제한 없음. 아래 초기값은 모두 DA 기본값이며 소스 상수가 아님.
 - 초기값(H3로 튜닝): 기본공격은 **공격 전체(Windup·Active·Recovery)** 제한 — 몸 Yaw 360°/s, 상반신 Pitch 180°/s, 몸-카메라 오프셋 Yaw 45°/Pitch 25°, 감도 Windup·Recovery 0.7 / Active 0.5. 발차기 Active Yaw 0 + 감도 0.3, 슬램 Loop Yaw 0.

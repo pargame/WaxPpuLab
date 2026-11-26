@@ -109,9 +109,9 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR �
 
 | 항목 | 주요 파라미터 |
 |---|---|
-| **Basic / Kick** (`FWaxAttackSpec`) | `Montages`, `PlayRate`, `StrainScale`, `RadiusScale`, `ForwardOffset`, 넉백·파편 임펄스, `Windup/Active/RecoveryRotation`(몸 회전 속도·몸-카메라 오프셋·감도) |
+| **Basic / Kick** (`FWaxAttackSpec`) | `Montages`, `PlayRate`, `StrainScale`, `RadiusScale`, `ForwardOffset`, 넉백·파편 임펄스, `Windup/Active/RecoveryRotation`(몸 회전 속도·몸-카메라 오프셋·감도), `Windup/Active/RecoveryMovement`(앞·옆·뒤 이동 속도 배율, 점프 허용) |
 | **JumpAttack** | `AerialStrike`, `Slam`, `HoldThresholdSec`, `SlamMinHeight` 등 |
-| **Settings** | `BaseImpactRadius`, `BaseImpactStrain`, `BufferWindowSec`, `ComboResetSec`, 회전 복귀·감도 블렌드, `OffsetFalloffCurve`, `Marker*`(색·지속·발광·불투명도·번짐) |
+| **Settings** | `BaseImpactRadius`, `BaseImpactStrain`, `BufferWindowSec`, `ComboResetSec`, 회전 복귀·감도 블렌드, `MoveScaleBlendSpeed`, `OffsetFalloffCurve`, `Marker*`(색·지속·발광·불투명도·번짐) |
 
 공격 타이밍(타격·Active·CancelWindow·RotationProfile)은 펀치 몽타주의 노티파이로 조정합니다. 상세는 [공격 시스템 설계](Docs/Design/CombatAttackDesign.md).
 

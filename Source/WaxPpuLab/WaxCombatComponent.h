@@ -110,6 +110,10 @@ public:
 	/** 공격 중 1인칭 머리 추종을 끌지 여부 */
 	bool ShouldSuppressHeadFollow() const;
 
+	/** 현재 공격 단계에서 점프 가능 여부 (비공격 시 항상 true) */
+	UFUNCTION(BlueprintPure, Category = "WaxCombat")
+	bool IsJumpAllowed() const;
+
 	/** 판정에 쓰는 공격 방향 (몸 Yaw + 상반신 Pitch) */
 	FVector GetAttackAimDirection() const;
 
@@ -156,6 +160,7 @@ private:
 	void SetMarkerVisible(bool bVisible, const FVector& Center = FVector::ZeroVector, float Radius = 0.0f);
 
 	void UpdateRotation(float DeltaTime);
+	void UpdateMovementLimit(float DeltaTime);
 	float FilterLookDelta(float Delta, float Offset, float MaxOffset) const;
 
 	void CollectHitFrames(UAnimMontage* Montage, TArray<TPair<float, FName>>& OutHits) const;
@@ -197,6 +202,10 @@ private:
 	float CurrentSensitivityScale = 1.0f;
 	FRotator LastControlRotation = FRotator::ZeroRotator;
 	bool bHasLastControlRotation = false;
+
+	float BaseMaxWalkSpeed = 0.0f;
+	float CurrentMoveScale = 1.0f;
+	float RotMinMoveScale = 1.0f;
 
 	bool bRotSessionActive = false;
 	int32 RotSessionAttacks = 0;

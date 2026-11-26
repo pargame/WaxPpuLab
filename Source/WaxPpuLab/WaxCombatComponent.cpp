@@ -50,6 +50,11 @@ void UWaxCombatComponent::BeginPlay()
 	{
 		UE_LOG(LogWaxCombat, Warning, TEXT("WaxCombat owner=%s AttackSet is not assigned."), *GetNameSafe(GetOwner()));
 	}
+
+	if (OwnerCharacter && OwnerCharacter->GetCharacterMovement())
+	{
+		BaseMaxWalkSpeed = OwnerCharacter->GetCharacterMovement()->MaxWalkSpeed;
+	}
 }
 
 double UWaxCombatComponent::Now() const
@@ -332,6 +337,7 @@ bool UWaxCombatComponent::StartAttack(EWaxAttackSlot Slot, bool bFromBuffer)
 		RotMaxYawOffset = 0.0f;
 		RotMaxPitchOffset = 0.0f;
 		RotMinSensitivity = 1.0f;
+		RotMinMoveScale = 1.0f;
 		RotBoundaryFrames = 0;
 	}
 	++RotSessionAttacks;
@@ -759,6 +765,41 @@ void UWaxCombatComponent::UpdateRotation(float DeltaTime)
 	}
 }
 
+bool UWaxCombatComponent::IsJumpAllowed() const
+{
+	return !IsAttacking() || CurrentSpec.GetPhaseMovement(Phase).bAllowJump;
+}
+
+void UWaxCombatComponent::UpdateMovementLimit(float DeltaTime)
+{
+	UCharacterMovementComponent* Movement = OwnerCharacter ? OwnerCharacter->GetCharacterMovement() : nullptr;
+	if (!Movement || BaseMaxWalkSpeed <= 0.0f)
+	{
+		return;
+	}
+
+	float TargetScale = 1.0f;
+	if (IsAttacking())
+	{
+		// 이동 방향은 몸 정면 기준 (공격 중 몸 Yaw가 시선보다 늦을 수 있음)
+		const FVector LocalInput = OwnerCharacter->GetActorRotation().UnrotateVector(Movement->GetLastInputVector());
+		const FVector2D Dir = FVector2D(LocalInput.X, LocalInput.Y).GetSafeNormal();
+		TargetScale = Dir.IsNearlyZero() ? CurrentMoveScale : CurrentSpec.GetPhaseMovement(Phase).ResolveSpeedScale(Dir.X, Dir.Y);
+	}
+
+	const float BlendSpeed = GetSettings().MoveScaleBlendSpeed;
+	CurrentMoveScale = BlendSpeed > KINDA_SMALL_NUMBER ? FMath::FInterpTo(CurrentMoveScale, TargetScale, DeltaTime, BlendSpeed) : TargetScale;
+	if (FMath::IsNearlyEqual(CurrentMoveScale, TargetScale, 0.001f))
+	{
+		CurrentMoveScale = TargetScale;
+	}
+	if (bRotSessionActive)
+	{
+		RotMinMoveScale = FMath::Min(RotMinMoveScale, CurrentMoveScale);
+	}
+	Movement->MaxWalkSpeed = BaseMaxWalkSpeed * CurrentMoveScale;
+}
+
 void UWaxCombatComponent::FinishRotationSession()
 {
 	bRotSessionActive = false;
@@ -766,8 +807,8 @@ void UWaxCombatComponent::FinishRotationSession()
 	const bool bStuck = RecoverSec > RotationStuckWarnSec;
 	if (bVerboseLog || bStuck)
 	{
-		UE_LOG(LogWaxCombat, Log, TEXT("WaxRot Session attacks=%d maxYawOff=%.1f maxPitchOff=%.1f minSens=%.2f boundaryFrames=%d recover=%.2fs stuck=%d"),
-			RotSessionAttacks, RotMaxYawOffset, RotMaxPitchOffset, RotMinSensitivity, RotBoundaryFrames, RecoverSec, bStuck ? 1 : 0);
+		UE_LOG(LogWaxCombat, Log, TEXT("WaxRot Session attacks=%d maxYawOff=%.1f maxPitchOff=%.1f minSens=%.2f minMove=%.2f boundaryFrames=%d recover=%.2fs stuck=%d"),
+			RotSessionAttacks, RotMaxYawOffset, RotMaxPitchOffset, RotMinSensitivity, RotMinMoveScale, RotBoundaryFrames, RecoverSec, bStuck ? 1 : 0);
 	}
 }
 
@@ -793,6 +834,7 @@ void UWaxCombatComponent::TickComponent(float DeltaTime, ELevelTick TickType, FA
 		bHoldStartedGrounded = false;
 	}
 	UpdateRotation(DeltaTime);
+	UpdateMovementLimit(DeltaTime);
 
 	if (bMarkerActive && (!bShowImpactMarker || Now() >= MarkerExpireTime))
 	{

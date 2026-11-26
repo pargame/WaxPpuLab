@@ -181,7 +181,11 @@ void AWaxPpuLabCharacter::DoMove(float Right, float Forward)
 
 void AWaxPpuLabCharacter::DoJumpStart()
 {
-	// pass Jump to the character
+	// 공격 단계의 이동 제한이 점프를 막으면 무시
+	if (CombatComponent && !CombatComponent->IsJumpAllowed())
+	{
+		return;
+	}
 	Jump();
 }
 

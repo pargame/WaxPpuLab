@@ -66,6 +66,43 @@ struct FWaxRotationProfile
 	bool LimitsYaw() const { return MaxYawRateDegPerSec > 0.0f; }
 };
 
+/** 공격 단계별 이동 제한. 속도 배율은 몸 정면 기준 입력 방향으로 섞임 (1: 평소와 동일) */
+USTRUCT(BlueprintType)
+struct FWaxMovementProfile
+{
+	GENERATED_BODY()
+
+	/** 앞으로 이동할 때 속도 배율. 낮출수록 공격 중 전진이 느려짐 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float ForwardSpeedScale = 1.0f;
+
+	/** 옆으로 이동할 때 속도 배율 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float StrafeSpeedScale = 1.0f;
+
+	/** 뒤로 이동할 때 속도 배율 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float BackwardSpeedScale = 1.0f;
+
+	/** 이 단계에서 점프 허용 여부 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
+	bool bAllowJump = true;
+
+	/** 몸 기준 입력 방향(로컬 X: 앞, Y: 옆, 정규화)에 대한 속도 배율 */
+	float ResolveSpeedScale(float LocalX, float LocalY) const
+	{
+		const float X2 = LocalX * LocalX;
+		const float Y2 = LocalY * LocalY;
+		const float Sum = X2 + Y2;
+		if (Sum <= KINDA_SMALL_NUMBER)
+		{
+			return 1.0f;
+		}
+		const float AxisScale = LocalX >= 0.0f ? ForwardSpeedScale : BackwardSpeedScale;
+		return (AxisScale * X2 + StrafeSpeedScale * Y2) / Sum;
+	}
+};
+
 /** 공격 1종의 튜닝 데이터 */
 USTRUCT(BlueprintType)
 struct FWaxAttackSpec
@@ -128,6 +165,18 @@ struct FWaxAttackSpec
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rotation")
 	FWaxRotationProfile RecoveryRotation;
 
+	/** 선딜(Windup) 이동 제한 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
+	FWaxMovementProfile WindupMovement;
+
+	/** 타격(Active) 이동 제한 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
+	FWaxMovementProfile ActiveMovement;
+
+	/** 후딜(Recovery) 이동 제한 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
+	FWaxMovementProfile RecoveryMovement;
+
 	const FWaxRotationProfile& GetPhaseRotation(EWaxAttackPhase Phase) const
 	{
 		switch (Phase)
@@ -135,6 +184,16 @@ struct FWaxAttackSpec
 		case EWaxAttackPhase::Active: return ActiveRotation;
 		case EWaxAttackPhase::Recovery: return RecoveryRotation;
 		default: return WindupRotation;
+		}
+	}
+
+	const FWaxMovementProfile& GetPhaseMovement(EWaxAttackPhase Phase) const
+	{
+		switch (Phase)
+		{
+		case EWaxAttackPhase::Active: return ActiveMovement;
+		case EWaxAttackPhase::Recovery: return RecoveryMovement;
+		default: return WindupMovement;
 		}
 	}
 };
@@ -197,6 +256,10 @@ struct FWaxCombatSettings
 	/** 카메라 감도 배율 전환 속도 (1/초). 0이면 즉시 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rotation", meta = (ClampMin = "0.0"))
 	float SensitivityBlendSpeed = 20.0f;
+
+	/** 공격 중 이동 속도 배율 전환 속도 (1/초). 0이면 즉시 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement", meta = (ClampMin = "0.0"))
+	float MoveScaleBlendSpeed = 15.0f;
 
 	/** 공격 종료 후 몸을 시선 방향으로 되돌리는 속도 (도/초) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rotation", meta = (ClampMin = "1.0"))
