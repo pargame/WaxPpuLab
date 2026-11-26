@@ -1,7 +1,7 @@
 # WaxPpuLab
 
 Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR 오디오 프로토타입(**왁뿌던전 탈출**) 프로젝트입니다.
-신규 협업자 및 AI 에이전트용 불변 가드레일·빌드 주의사항은 [AGENTS.md](./AGENTS.md)를 먼저 확인하세요.
+프로젝트 불변 조건·도구는 [Docs/ProjectGuide.md](./Docs/ProjectGuide.md), 범용 언리얼 규칙은 전역 `unreal-engine` 스킬을 따릅니다.
 
 ---
 
