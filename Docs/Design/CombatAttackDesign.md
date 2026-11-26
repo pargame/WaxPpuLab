@@ -1,6 +1,6 @@
 # 공격 시스템 설계 (기본공격 · 점프공격 · 밀어내기 발차기)
 
-상태: **P0 완료** (설계: Claude–Gemini 2회 협업 검토 반영) · 다음 P0.5 회전 제한
+상태: **P0 완료 · P0.5 구현 완료(H3 체감 확인 대기)** (설계: Claude–Gemini 2회 협업 검토 반영)
 
 ## 1. 확정된 결정
 
@@ -82,7 +82,7 @@ Montage ─ UWaxAttackHitNotify    (UWaxPunchAnimNotify 일반화, CoreRedirect�
 - **이동**: `DoMove`는 Control Yaw 기준(항상 시선 기준 이동).
 - **타격 방향**: 카메라 전방이 아니라 몸 Yaw + 상반신 Pitch로 산출(보이는 팔과 판정 방향 일치).
 - **프로파일**: `FWaxRotationProfile = {MaxYawRateDegPerSec, MaxPitchRateDegPerSec, MaxBodyCameraYawOffsetDeg, MaxBodyCameraPitchOffsetDeg, CameraSensitivityScale}`. 해석 순서: `RotationProfile` NotifyState 오버라이드 → DA 단계별 기본값 → 비공격 시 제한 없음. 아래 초기값은 모두 DA 기본값이며 소스 상수가 아님.
-- 초기값(H3로 튜닝): 기본공격 Active 감도 0.5, 발차기 Active Yaw 0 + 감도 0.3, 슬램 Loop Yaw 0.
+- 초기값(H3로 튜닝): 기본공격은 **공격 전체(Windup·Active·Recovery)** 제한 — 몸 Yaw 360°/s, 상반신 Pitch 180°/s, 몸-카메라 오프셋 Yaw 45°/Pitch 25°, 감도 Windup·Recovery 0.7 / Active 0.5. 발차기 Active Yaw 0 + 감도 0.3, 슬램 Loop Yaw 0.
 
 ### 입력 및 상태 규칙
 
@@ -169,7 +169,13 @@ Montage ─ UWaxAttackHitNotify    (UWaxPunchAnimNotify 일반화, CoreRedirect�
 - 회전 보정은 현재 Tick에서 ControlRotation 델타를 재스케일하는 방식. P0.5 착수 시 `DoAim` 입력 단계 필터로 옮길지 재검토(입력 축 스케일 부호 확인 필요).
 - 도구: `Scripts/validate_attacks.py`(헤드리스 검증), `-game -WaxCapture=<Slot> -WaxCaptureQuit`(측면 고정 시점 정지 캡처, `CaptureViewYawOffsetDeg`/`CaptureViewPitchDeg`), `Scripts/contact_sheet.py`.
 
-## 7. 리스크
+## 7. 구현 메모 (P0.5)
+
+- 회전 갱신 순서: 감도 블렌드 → 카메라 입력 필터(몸 Yaw 기준 오프셋) → 몸 Yaw가 **필터된** 시선을 추종. 보정 전 시선을 추종하면 몸이 카메라를 앞질러 오프셋이 허용치를 넘음(강한 플릭에서 59° 실측 후 수정). 회전 보정은 Tick 재스케일 방식 유지.
+- 로그 `WaxRot Session`: 연속 공격 묶음(첫 공격 ~ 몸 정렬 완료) 단위로 `maxYawOff`·`maxPitchOff`·`minSens`·`boundaryFrames`(바깥 입력이 경계에서 완전히 막힌 프레임)·`recover`·`stuck` 기록. `recover > RotationStuckWarnSec`(1.0s)이면 고착.
+- 자동 검증(PIE, Python으로 공격 홀드 + 시점 입력 주입): 약한 회전 maxYawOff 14.7 / 강한 플릭 39.1(≤45), maxPitchOff ≤25, recover 0.2s, stuck 0.
+
+## 8. 리스크
 
 - **FirstPersonScale 0.6**: 다리가 보이면 카메라 쪽으로 축소·왜곡될 수 있음 → H0 결과에 따라 하체 HideBone 또는 FP 스케일 예외 처리 검토.
 - **Mixamo 리타겟 품질**: 손가락·루트 이슈 가능 → 루트 트랙 제거, 루트모션 OFF, 본 오차 수치로 후보 선별.

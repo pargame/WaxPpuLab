@@ -324,6 +324,19 @@ bool UWaxCombatComponent::StartAttack(EWaxAttackSlot Slot, bool bFromBuffer)
 	LastStartedSlot = Slot;
 	ComboIndex = (MontageIndex + 1) % NumMontages;
 
+	// 회전 통계는 연속 공격 묶음(첫 공격 ~ 몸 정렬 완료) 단위로 집계
+	if (!bRotSessionActive)
+	{
+		bRotSessionActive = true;
+		RotSessionAttacks = 0;
+		RotMaxYawOffset = 0.0f;
+		RotMaxPitchOffset = 0.0f;
+		RotMinSensitivity = 1.0f;
+		RotBoundaryFrames = 0;
+	}
+	++RotSessionAttacks;
+	RotRecoverStartTime = -1.0;
+
 	Phase = EWaxAttackPhase::Idle;
 	SetPhase(EWaxAttackPhase::Windup);
 	OnAttackStarted.Broadcast(Slot, Montage);
@@ -347,6 +360,7 @@ void UWaxCombatComponent::EndAttack(bool bInterrupted)
 	CancelAllowedSlots.Reset();
 	RotationOverrides.Reset();
 	LastAttackEndTime = Now();
+	RotRecoverStartTime = Now();
 
 	OnAttackEnded.Broadcast(EndedSlot, bInterrupted);
 	if (bVerboseLog)
@@ -650,29 +664,7 @@ void UWaxCombatComponent::UpdateRotation(float DeltaTime)
 	const bool bAttacking = IsAttacking();
 	const FWaxRotationProfile Profile = GetActiveRotationProfile();
 	const FRotator Control = PC->GetControlRotation();
-
-	// 몸 Yaw
 	const float BodyYaw = OwnerCharacter->GetActorRotation().Yaw;
-	if (bAttacking && Profile.LimitsYaw())
-	{
-		if (!bBodyYawDetached)
-		{
-			OwnerCharacter->bUseControllerRotationYaw = false;
-			bBodyYawDetached = true;
-		}
-		const float NewYaw = FMath::FixedTurn(BodyYaw, Control.Yaw, Profile.MaxYawRateDegPerSec * DeltaTime);
-		OwnerCharacter->SetActorRotation(FRotator(0.0f, NewYaw, 0.0f));
-	}
-	else if (bBodyYawDetached)
-	{
-		const float NewYaw = FMath::FixedTurn(BodyYaw, Control.Yaw, Settings.RecoverYawRateDegPerSec * DeltaTime);
-		OwnerCharacter->SetActorRotation(FRotator(0.0f, NewYaw, 0.0f));
-		if (FMath::Abs(FRotator::NormalizeAxis(Control.Yaw - NewYaw)) <= Settings.RecoverSnapToleranceDeg)
-		{
-			OwnerCharacter->bUseControllerRotationYaw = true;
-			bBodyYawDetached = false;
-		}
-	}
 
 	// 카메라 감도 (소프트 클램프)
 	const float TargetScale = bAttacking ? Profile.CameraSensitivityScale : 1.0f;
@@ -686,33 +678,97 @@ void UWaxCombatComponent::UpdateRotation(float DeltaTime)
 
 	const bool bNeutral = CurrentSensitivityScale >= 0.999f
 		&& (!bAttacking || (Profile.MaxBodyCameraYawOffsetDeg <= 0.0f && Profile.MaxBodyCameraPitchOffsetDeg <= 0.0f));
-	if (bNeutral || !bHasLastControlRotation)
+	if (bAttacking)
 	{
-		LastControlRotation = Control;
-		bHasLastControlRotation = true;
-		return;
+		RotMinSensitivity = FMath::Min(RotMinSensitivity, CurrentSensitivityScale);
 	}
 
-	const AWaxPpuLabCharacter* WaxCharacter = Cast<AWaxPpuLabCharacter>(OwnerCharacter);
-	const float MaxUpperPitch = WaxCharacter ? WaxCharacter->MaxUpperBodyPitchDeg : 45.0f;
-	const float AimPitch = WaxCharacter ? WaxCharacter->GetAimPitch() : 0.0f;
-	const float CurrentBodyYaw = OwnerCharacter->GetActorRotation().Yaw;
+	// 먼저 카메라 입력을 걸러낸 뒤, 몸은 걸러진 시선을 따라감 (몸이 카메라를 앞지르지 않도록)
+	FRotator NewControl = Control;
+	if (!bNeutral && bHasLastControlRotation)
+	{
+		const AWaxPpuLabCharacter* WaxCharacter = Cast<AWaxPpuLabCharacter>(OwnerCharacter);
+		const float MaxUpperPitch = WaxCharacter ? WaxCharacter->MaxUpperBodyPitchDeg : 45.0f;
+		const float AimPitch = WaxCharacter ? WaxCharacter->GetAimPitch() : 0.0f;
 
-	const float DeltaYaw = FRotator::NormalizeAxis(Control.Yaw - LastControlRotation.Yaw);
-	const float DeltaPitch = FRotator::NormalizeAxis(Control.Pitch - LastControlRotation.Pitch);
-	const float YawOffset = FRotator::NormalizeAxis(LastControlRotation.Yaw - CurrentBodyYaw);
-	const float PitchOffset = FMath::Clamp(FRotator::NormalizeAxis(LastControlRotation.Pitch), -MaxUpperPitch, MaxUpperPitch) - AimPitch;
+		const float DeltaYaw = FRotator::NormalizeAxis(Control.Yaw - LastControlRotation.Yaw);
+		const float DeltaPitch = FRotator::NormalizeAxis(Control.Pitch - LastControlRotation.Pitch);
+		const float YawOffset = FRotator::NormalizeAxis(LastControlRotation.Yaw - BodyYaw);
+		const float PitchOffset = FMath::Clamp(FRotator::NormalizeAxis(LastControlRotation.Pitch), -MaxUpperPitch, MaxUpperPitch) - AimPitch;
 
-	const float MaxYawOffset = bAttacking ? Profile.MaxBodyCameraYawOffsetDeg : 0.0f;
-	const float MaxPitchOffset = bAttacking ? Profile.MaxBodyCameraPitchOffsetDeg : 0.0f;
+		const float MaxYawOffset = bAttacking ? Profile.MaxBodyCameraYawOffsetDeg : 0.0f;
+		const float MaxPitchOffset = bAttacking ? Profile.MaxBodyCameraPitchOffsetDeg : 0.0f;
 
-	FRotator NewControl = LastControlRotation;
-	NewControl.Yaw += FilterLookDelta(DeltaYaw, YawOffset, MaxYawOffset);
-	NewControl.Pitch += FilterLookDelta(DeltaPitch, PitchOffset, MaxPitchOffset);
-	NewControl.Roll = Control.Roll;
-	NewControl.Normalize();
-	PC->SetControlRotation(NewControl);
+		const float AppliedYaw = FilterLookDelta(DeltaYaw, YawOffset, MaxYawOffset);
+		const float AppliedPitch = FilterLookDelta(DeltaPitch, PitchOffset, MaxPitchOffset);
+		NewControl = LastControlRotation;
+		NewControl.Yaw += AppliedYaw;
+		NewControl.Pitch += AppliedPitch;
+		NewControl.Roll = Control.Roll;
+		NewControl.Normalize();
+		PC->SetControlRotation(NewControl);
+
+		if (bRotSessionActive)
+		{
+			RotMaxPitchOffset = FMath::Max(RotMaxPitchOffset, FMath::Abs(PitchOffset + AppliedPitch));
+			// 바깥으로 미는 입력이 경계에서 완전히 막힌 프레임
+			const bool bYawBlocked = MaxYawOffset > 0.0f && FMath::Abs(DeltaYaw) > KINDA_SMALL_NUMBER && FMath::Abs(AppliedYaw) <= KINDA_SMALL_NUMBER;
+			const bool bPitchBlocked = MaxPitchOffset > 0.0f && FMath::Abs(DeltaPitch) > KINDA_SMALL_NUMBER && FMath::Abs(AppliedPitch) <= KINDA_SMALL_NUMBER;
+			if (bYawBlocked || bPitchBlocked)
+			{
+				++RotBoundaryFrames;
+			}
+		}
+	}
 	LastControlRotation = NewControl;
+	bHasLastControlRotation = true;
+
+	// 몸 Yaw
+	float NewBodyYaw = BodyYaw;
+	if (bAttacking && Profile.LimitsYaw())
+	{
+		if (!bBodyYawDetached)
+		{
+			OwnerCharacter->bUseControllerRotationYaw = false;
+			bBodyYawDetached = true;
+		}
+		NewBodyYaw = FMath::FixedTurn(BodyYaw, NewControl.Yaw, Profile.MaxYawRateDegPerSec * DeltaTime);
+		OwnerCharacter->SetActorRotation(FRotator(0.0f, NewBodyYaw, 0.0f));
+	}
+	else if (bBodyYawDetached)
+	{
+		NewBodyYaw = FMath::FixedTurn(BodyYaw, NewControl.Yaw, Settings.RecoverYawRateDegPerSec * DeltaTime);
+		OwnerCharacter->SetActorRotation(FRotator(0.0f, NewBodyYaw, 0.0f));
+		if (FMath::Abs(FRotator::NormalizeAxis(NewControl.Yaw - NewBodyYaw)) <= Settings.RecoverSnapToleranceDeg)
+		{
+			OwnerCharacter->bUseControllerRotationYaw = true;
+			bBodyYawDetached = false;
+		}
+	}
+
+	if (bRotSessionActive)
+	{
+		if (bBodyYawDetached)
+		{
+			RotMaxYawOffset = FMath::Max(RotMaxYawOffset, FMath::Abs(FRotator::NormalizeAxis(NewControl.Yaw - NewBodyYaw)));
+		}
+		if (!bAttacking && !bBodyYawDetached && bNeutral)
+		{
+			FinishRotationSession();
+		}
+	}
+}
+
+void UWaxCombatComponent::FinishRotationSession()
+{
+	bRotSessionActive = false;
+	const float RecoverSec = RotRecoverStartTime >= 0.0 ? static_cast<float>(Now() - RotRecoverStartTime) : 0.0f;
+	const bool bStuck = RecoverSec > RotationStuckWarnSec;
+	if (bVerboseLog || bStuck)
+	{
+		UE_LOG(LogWaxCombat, Log, TEXT("WaxRot Session attacks=%d maxYawOff=%.1f maxPitchOff=%.1f minSens=%.2f boundaryFrames=%d recover=%.2fs stuck=%d"),
+			RotSessionAttacks, RotMaxYawOffset, RotMaxPitchOffset, RotMinSensitivity, RotBoundaryFrames, RecoverSec, bStuck ? 1 : 0);
+	}
 }
 
 void UWaxCombatComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)

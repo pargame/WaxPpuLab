@@ -84,6 +84,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxCombat|Debug")
 	bool bVerboseLog = true;
 
+	/** 공격 종료 후 몸 정렬이 이 시간(초)을 넘기면 회전 고착 경고 로그. 클수록 관대 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxCombat|Debug", meta = (ClampMin = "0.1"))
+	float RotationStuckWarnSec = 1.0f;
+
 	UPROPERTY(BlueprintAssignable, Category = "WaxCombat|Events")
 	FWaxAttackStartedSignature OnAttackStarted;
 
@@ -213,6 +217,15 @@ private:
 	float CurrentSensitivityScale = 1.0f;
 	FRotator LastControlRotation = FRotator::ZeroRotator;
 	bool bHasLastControlRotation = false;
+
+	bool bRotSessionActive = false;
+	int32 RotSessionAttacks = 0;
+	float RotMaxYawOffset = 0.0f;
+	float RotMaxPitchOffset = 0.0f;
+	float RotMinSensitivity = 1.0f;
+	int32 RotBoundaryFrames = 0;
+	double RotRecoverStartTime = -1.0;
+	void FinishRotationSession();
 
 	bool bMarkerActive = false;
 	double MarkerExpireTime = -1.0;
