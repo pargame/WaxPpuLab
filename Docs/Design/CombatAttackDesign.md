@@ -191,7 +191,14 @@ Montage ─ UWaxAttackHitNotify    (UWaxPunchAnimNotify 일반화, CoreRedirect�
 - 원본 템포 그대로 쓰기 위해 `Basic.PlayRate` 1.65 → 1.0. 슬롯은 아직 `DefaultSlot`(상·하체 슬롯 분리는 P1).
 - Mixamo 파생 에셋은 공개 저장소에 커밋하기로 결정(주인 승인).
 
-## 9. 리스크
+## 9. 구현 메모 (P1 발차기)
+
+- 후보 3종 리타겟: `Kicking`(앞으로 약 170cm 이동하는 2연속 킥, 제외), `Zombie Kicking`(채택), `Zombie Kicking-2`.
+- `AS_MX_Kick_Front`: `Zombie Kicking` 6–48프레임, 오른발 최대 전진(26프레임, 발끝 `ball_r`)에 타격. 좀비 팔은 팔·손 54본을 펀치 가드 자세(`AS_MX_Punch_1` 0프레임)로 고정해 교체.
+- 몽타주 `AM_MX_Kick_Front`: Active = 타격 −3~+2프레임, CancelWindow 없음.
+- DA 초기값(H3로 튜닝): PlayRate 1.3, StrainScale 0.5, RadiusScale 1.3, 넉백 수평 900 / 수직 250cm/s, 정지 0.6s, 파편 600 / 위 200cm/s, 반경 160. 회전 Active Yaw 0·감도 0.3, 이동 0.2 / 0 / 0.3, 점프 불가.
+
+## 10. 리스크
 
 - **FirstPersonScale 0.6**: 다리가 보이면 카메라 쪽으로 축소·왜곡될 수 있음 → H0 결과에 따라 하체 HideBone 또는 FP 스케일 예외 처리 검토.
 - **Mixamo 리타겟 품질**: 손가락·루트 이슈 가능 → 루트 트랙 제거, 루트모션 OFF, 본 오차 수치로 후보 선별.
