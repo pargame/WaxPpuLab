@@ -1,6 +1,6 @@
 # 공격 시스템 설계 (기본공격 · 점프공격 · 밀어내기 발차기)
 
-상태: **P0 완료 · P0.5 구현 완료(H3 체감 확인 대기)** · 공격 중 방향별 이동 제한 추가(초기값 1.0) · 다음 P1 발차기(H1 애니 다운로드 필요) (설계: Claude–Gemini 2회 협업 검토 반영)
+상태: **P0 완료 · P0.5 완료(회전·이동 제한 체감 튜닝 반영)** · 다음 P1 발차기(H1 애니 다운로드 필요) (설계: Claude–Gemini 2회 협업 검토 반영)
 
 ## 1. 확정된 결정
 
@@ -177,6 +177,7 @@ Montage ─ UWaxAttackHitNotify    (UWaxPunchAnimNotify 일반화, CoreRedirect�
 - 자동 검증(PIE, Python으로 공격 홀드 + 시점 입력 주입): 약한 회전 maxYawOff 14.7 / 강한 플릭 39.1(≤45), maxPitchOff ≤25, recover 0.2s, stuck 0.
 - 자동 검증 한계: 에디터 창이 포커스를 잃으면 백그라운드 절전으로 PIE가 3~4fps로 떨어져 회전 수치가 의미를 잃음(몸이 매 프레임 따라잡아 오프셋 0). 회전·이동 체감 측정은 사람이 포그라운드에서 수행(H3).
 - 공격 중 이동 제한(`FWaxMovementProfile`)은 `UpdateMovementLimit`에서 BeginPlay 때 읽은 `MaxWalkSpeed`를 기준으로 배율 적용. 세션 로그 `minMove`로 확인.
+- 체감 확인(H3): 회전 '적당', 경계 고착 0회. 최종 회전·이동 수치는 사람이 `DA_AttackSet_Unarmed`에서 직접 튜닝(PIE 68연타 maxYawOff 31.6, minMove 0.20, stuck 0).
 
 ## 8. 리스크
 
