@@ -143,9 +143,9 @@ public:
 	float AbortAngleDeg = 55.0f;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxButter|Runtime")
-	bool bLockTargetOnLayDown = true;
+	float TargetTrackingRatio = 0.0f;
 
-	/** 목표 고정 모드에서 눕는 순간 기록한 플레이어 위치 */
+	/** 눕는 순간 기록한 플레이어 위치 (추적 비율 0일 때의 목표) */
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxButter|Runtime")
 	FVector LockedTargetLocation = FVector::ZeroVector;
 
@@ -181,6 +181,7 @@ private:
 	float PrevStepForward = 0.0f;
 	float PendingSteerYaw = 0.0f;
 	bool bHasLockedTarget = false;
+	bool GetTumbleTarget(FVector& OutDir2D, float& OutDist2D) const;
 	float StandStartHeight = 75.0f;
 	float StandStartTheta = 0.0f;
 };

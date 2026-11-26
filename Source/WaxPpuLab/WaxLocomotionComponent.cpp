@@ -211,7 +211,7 @@ void UWaxButterLocomotionComponent::InitializeLocomotion(AWaxMonsterBase* InMons
 		MaxCorrectionYawPerStepDeg = FMath::Clamp(S.MaxCorrectionYawPerStepDeg, 0.0f, 45.0f);
 		SteerYawRateDeg = FMath::Clamp(S.SteerYawRateDeg, 10.0f, 720.0f);
 		AbortAngleDeg = FMath::Clamp(S.AbortAngleDeg, 15.0f, 180.0f);
-		bLockTargetOnLayDown = S.bLockTargetOnLayDown;
+		TargetTrackingRatio = FMath::Clamp(S.TargetTrackingRatio, 0.0f, 1.0f);
 	}
 
 	LocoState = EWaxButterLocoState::HopAlign;
@@ -259,6 +259,29 @@ void UWaxButterLocomotionComponent::SetCapsuleHalfHeightKeepFloor(float NewHalfH
 			}
 		}
 	}
+}
+
+bool UWaxButterLocomotionComponent::GetTumbleTarget(FVector& OutDir2D, float& OutDist2D) const
+{
+	FVector DirToPlayer;
+	float DistToPlayer = 0.0f;
+	const bool bHasPlayer = GetDirectionToPlayer(DirToPlayer, DistToPlayer);
+	if (!bHasLockedTarget || !OwnerMonster)
+	{
+		OutDir2D = DirToPlayer;
+		OutDist2D = DistToPlayer;
+		return bHasPlayer;
+	}
+
+	const FVector Here = OwnerMonster->GetActorLocation();
+	const FVector Target = bHasPlayer
+		? FMath::Lerp(LockedTargetLocation, Here + DirToPlayer * DistToPlayer, TargetTrackingRatio)
+		: LockedTargetLocation;
+	FVector ToTarget = Target - Here;
+	ToTarget.Z = 0.0f;
+	OutDist2D = ToTarget.Size();
+	OutDir2D = OutDist2D > KINDA_SMALL_NUMBER ? ToTarget / OutDist2D : OwnerMonster->GetActorForwardVector().GetSafeNormal2D();
+	return true;
 }
 
 bool UWaxButterLocomotionComponent::GetDirectionToPlayer(FVector& OutDir2D, float& OutDist2D) const
@@ -347,17 +370,14 @@ void UWaxButterLocomotionComponent::EnterState(EWaxButterLocoState NewState)
 		ChooseLayDirection();
 		PrevLayLateral = 0.0f;
 
-		// 목표 고정 모드: 눕는 순간의 플레이어 위치를 목적지로 기록
+		// 눕는 순간의 플레이어 위치를 기록 (추적 비율에 따라 현재 위치와 섞어 굴림 목표로 사용)
 		bHasLockedTarget = false;
-		if (bLockTargetOnLayDown)
+		FVector DirToPlayer;
+		float DistToPlayer = 0.0f;
+		if (GetDirectionToPlayer(DirToPlayer, DistToPlayer))
 		{
-			FVector DirToPlayer;
-			float DistToPlayer = 0.0f;
-			if (GetDirectionToPlayer(DirToPlayer, DistToPlayer))
-			{
-				LockedTargetLocation = OwnerMonster->GetActorLocation() + DirToPlayer * DistToPlayer;
-				bHasLockedTarget = true;
-			}
+			LockedTargetLocation = OwnerMonster->GetActorLocation() + DirToPlayer * DistToPlayer;
+			bHasLockedTarget = true;
 		}
 		if (BodyPivot)
 		{
@@ -561,20 +581,9 @@ void UWaxButterLocomotionComponent::TickTumbleCharge(float DeltaTime)
 		PrevStepForward = 0.0f;
 		TumbleOmega = FMath::Max(InitialStepOmega * SpeedScale, TumbleOmega * StepBounceRetention);
 
-		if (bHasLockedTarget)
-		{
-			// 고정 목적지까지 남은 진행 거리. 도착(정지 거리 이내)하거나 지나쳤으면 일어섬, 방향 보정 없음
-			const float Remaining = FVector::DotProduct(LockedTargetLocation - OwnerMonster->GetActorLocation(), ChargeDir);
-			if (Remaining <= OwnerMonster->StopDistanceToPlayer || TumbleStepIndex >= MaxTumbleSteps)
-			{
-				EnterState(EWaxButterLocoState::StandUp);
-			}
-			return;
-		}
-
 		FVector DirToPlayer;
 		float DistToPlayer = 0.0f;
-		const bool bHasPlayer = GetDirectionToPlayer(DirToPlayer, DistToPlayer);
+		const bool bHasPlayer = GetTumbleTarget(DirToPlayer, DistToPlayer);
 		if (!bHasPlayer || DistToPlayer <= OwnerMonster->StopDistanceToPlayer || TumbleStepIndex >= MaxTumbleSteps)
 		{
 			EnterState(EWaxButterLocoState::StandUp);

@@ -84,7 +84,7 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR �
 | **Visual** | `ShellCollectionAsset`, `ShellRelativeOffset` | Chaos 껍질 에셋 및 `BodyPivot` 기준 오프셋 |
 | **Movement** | `LocomotionClass`, `MoveSpeed`, `StopDistanceToPlayer`, `bChasePlayer`, `RollRadius`, `CapsuleRadius`, `CapsuleHalfHeight` | 로코모션 클래스, 이동 속도, 공격 대기 거리, 추적 여부, 구르기 반경, 캡슐 크기 |
 | **HitStop** | `bEnableHitSlowdown`, `HitSlowdownDuration`, `HitSlowdownSpeedMultiplier` | 피격 시 잠깐 느려지는 반응 |
-| **Movement \| Butter** | `ButterLocomotion` (`HalfX/Y/Z`, `MinChargeStartDistance`, `HopDuration/Pause/Height`, `MaxYawPerHopDeg`, `AlignToleranceDeg`, `LayDownDuration`, `StandUpDuration`, `EffectiveGravity`, `DriveAngularAccel`, `InitialStepOmega`, `StepBounceRetention`, `MaxTumbleSteps`, `MaxCorrectionYawPerStepDeg`, `SteerYawRateDeg`, `AbortAngleDeg`, `bLockTargetOnLayDown`) | **왁스버터 전용 튜닝값 전부** (`UWaxButterLocomotionComponent` 런타임 필드는 읽기 전용이며 반드시 `DA_WaxButter.ButterLocomotion`에서 수정) |
+| **Movement \| Butter** | `ButterLocomotion` (`HalfX/Y/Z`, `MinChargeStartDistance`, `HopDuration/Pause/Height`, `MaxYawPerHopDeg`, `AlignToleranceDeg`, `LayDownDuration`, `StandUpDuration`, `EffectiveGravity`, `DriveAngularAccel`, `InitialStepOmega`, `StepBounceRetention`, `MaxTumbleSteps`, `MaxCorrectionYawPerStepDeg`, `SteerYawRateDeg`, `AbortAngleDeg`, `TargetTrackingRatio`) | **왁스버터 전용 튜닝값 전부** (`UWaxButterLocomotionComponent` 런타임 필드는 읽기 전용이며 반드시 `DA_WaxButter.ButterLocomotion`에서 수정) |
 | **Destruction** | `CollapseRemainingRatio`, `CollapseReleaseStrain`, `DebrisLifeSpanAfterCollapse`, `HardnessZones` | 붕괴 임계 잔여율(기본 `0.30`), 붕괴 방출 스트레인, 파편 수명, 부위별 경도/오디오 존 |
 | **Core** | `CoreMeshAsset`, `CoreMaterial`, `CorePhysicalMaterial`, `CoreRelativeScale/Offset`, `CoreLinearDamping`, `CoreAngularDamping`, `CorePopVelocityMin/Max`, `bEnableCoreRevive`, `CoreReviveDelaySec`, `ReviveGrowDuration`, `RevivePreviewMeshAsset/Material/Scale`, `CoreBounceSound` | 코어 외형·탄성·팝 속도·감쇠, 자동 부활 ON/OFF 및 재생 프리뷰 설정 |
 | **Eyes** | `EyeCollectionAsset`, `EyeMaterial`, `EyeDamageThreshold`, `EyeDurability`, `EyeForwardOffset`, `EyeSpacing`, `EyeHeightOffset`, `EyeScale`, `EyeBaseHitRadius`, `EyeDropTimeoutSec`, `EyeShatterSound` | 눈알 Chaos 에셋, 파괴 임계치·타격 내구도, 배치 오프셋·크기, 붕괴 시 낙하 파쇄 타임아웃 |
@@ -95,7 +95,7 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR �
 > **왁스버터(`DA_WaxButter`) 주의사항**
 > - `UWaxButterLocomotionComponent` 사용 시 **`MoveSpeed`와 `CapsuleHalfHeight`는 무시**됩니다.
 > - 버터 구르기 속도·기둥 높이는 반드시 **`ButterLocomotion`** (`EffectiveGravity`, `DriveAngularAccel`, `InitialStepOmega`, `HalfX/Y/Z`)에서 수정하세요.
-> - `bLockTargetOnLayDown`(기본 켜짐): 눕는 순간의 플레이어 위치를 목적지로 고정하고, 방향 보정 없이 그 지점의 `StopDistanceToPlayer` 앞까지만 구른 뒤 일어섭니다(막히거나 `MaxTumbleSteps` 도달 시에도 일어섬). 끄면 매 굴림마다 플레이어를 다시 보고 방향을 보정합니다.
+> - `TargetTrackingRatio`(0~1, 기본 0): 굴림 목표를 눕는 순간의 플레이어 위치와 현재 플레이어 위치 사이에서 섞습니다. 0이면 눕는 순간의 지점으로만 가고, 1이면 매 굴림마다 실시간 위치를 따라갑니다(이전 방식). 목표의 `StopDistanceToPlayer` 이내 도착, 이탈 각도(`AbortAngleDeg`) 초과, 막힘, `MaxTumbleSteps` 도달 시 일어섭니다.
 > - `StopDistanceToPlayer`는 버터에서도 구르기 종료 및 최소 돌진 기준(`Max(StopDistanceToPlayer, MinChargeStartDistance)`)에 정상 반영됩니다.
 
 ### 2. 플레이어 — DataAsset (`/Game/WaxPpu/Data/DA_WaxPlayer`)
