@@ -13,12 +13,15 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR �
 | 입력 | 동작 |
 |---|---|
 | `WASD` / 마우스 | 이동 / 시점 |
-| `SpaceBar` / 좌클릭 | 왁스 및 눈알 깎기 (홀드 연타 지원) |
+| `SpaceBar` / 좌클릭 | 기본공격(펀치). 누르고 있으면 연타, 공격 중 누른 입력은 버퍼로 다음 타에 연결 |
+| `T` | 3인칭 프리뷰 ↔ 1인칭 전환 (개발 테스트용 기본값 3인칭) |
 | `Q` / `E` | 소환할 몬스터 전환 (`BP_WaxBall_Basic` ↔ `BP_WaxButter`) |
 | `R` | 현재 선택된 몬스터를 플레이어 전방에 소환 |
 | `1` / `2` | 개발용 ASMR 사운드 프리셋 전환 (`1`: WoodPlank + Heavy/BambooClick 랜덤 [기본], `2`: HardBlock + JadeMarble/SoftWaxTap 랜덤) |
 
-- **콘솔 명령 (`UFUNCTION(Exec)`)**: `SetWaxAudioPreset <1..10>` — 현재 월드 몬스터 전체의 오디오 프리셋을 즉시 전환하며, 전역 상태(`GActiveDevAudioPreset`)에 저장되어 이후 `R` 키로 새로 소환되는 몬스터에도 자동 적용됩니다.
+- **콘솔 명령 (`UFUNCTION(Exec)`)**:
+  - `SetWaxAudioPreset <1..10>` — 현재 월드 몬스터 전체의 오디오 프리셋을 즉시 전환하며, 전역 상태(`GActiveDevAudioPreset`)에 저장되어 이후 `R` 키로 새로 소환되는 몬스터에도 자동 적용됩니다.
+  - `WaxAttackCapture <Basic|AerialStrike|Slam|Kick>` — 공격 타격 프레임 전후를 3인칭으로 정지 캡처합니다.
 
 ---
 
@@ -26,10 +29,17 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR �
 
 ### 1. 플레이어 계층 (`Source/WaxPpuLab/`)
 - `AWaxPpuLabCharacter` (`BP_WaxPlayer` / `BP_FirstPersonCharacter` 부모):
-  - 펀치 애님 몽타주(`RequestPunch`) 및 `UWaxPunchAnimNotify` 시점의 주먹 본 기반 구체 오버랩 타격(`HandlePunchImpactNotify` → `ExecuteWaxImpactAtLocation`)
-  - 이동 중 발밑 파편 물리 발차기(`UpdateDebrisKick`)
-  - 타격 시점에만 `MPC_WaxTargeting`에 빨강 표면 마커를 `PunchMarkerDurationSec` 동안 표시(`bShowPunchImpactMarker` / `bShowDebugPunchImpact`로 개별 제어)
+  - 입력을 `UWaxCombatComponent`로 전달하고, 공격 흐름 훅(`SelectAttackMontage`, `CanExecuteAttack`, `ResolveRotationProfile`)을 `IWaxCombatFlowInterface`로 노출해 BP에서 재정의할 수 있게 합니다.
+  - 1인칭 카메라 머리 추종, 상반신 시선 Pitch(척추 3본 분배), 3인칭 프리뷰(`T`), 이동 중 발밑 파편 걷어차기(`UpdateDebrisKick`)
+  - 튜닝 수치는 `PlayerData`(`DA_WaxPlayer`)에서 BeginPlay에 복사합니다.
   - 테스트 몬스터 소환(`SpawnDemoWaxBallInFront`) 및 오디오 프리셋 전환(`SetWaxAudioPreset`)
+- `UWaxCombatComponent` (캐릭터 기본 서브오브젝트, 수치는 `DA_AttackSet_Unarmed`):
+  - 단일 슬롯 입력 버퍼(최신 우선, 만료·재검증), 홀드 연타 상태 폴백, `Idle → Windup → Active → Recovery` 단계 FSM
+  - 몸체 메시 본 기준 구 오버랩 타격(공격 1회당 대상 중복 제거), `MPC_WaxTargeting` 빨강 표면 마커
+  - 공격 단계별 회전 제한(몸 Yaw 속도, 몸-카메라 오프셋 소프트 클램프, 감도)과 방향별 이동 속도 배율·점프 허용
+  - BP 이벤트: `OnAttackStarted`, `OnAttackPhaseChanged`, `OnAttackHit`, `OnAttackEnded`, `OnBufferConsumed`
+  - 로그 `LogWaxCombat`(공격·버퍼·타격, `WaxRot Session` 회전·이동 통계)
+- 몽타주 노티파이: `UWaxAttackHitNotify`(타격, 구 `UWaxPunchAnimNotify`는 CoreRedirect로 호환), `Active`·`CancelWindow`·`RotationProfile` NotifyState
 - `AWaxPpuLabPlayerController`, `AWaxPpuLabCameraManager`, `AWaxPpuLabGameMode`: 1인칭 입력 매핑, 카메라 피치/시점, 게임모드 기본 틀 제공.
 
 ### 2. 몬스터 계층 (`AWaxMonsterBase`)
@@ -42,7 +52,7 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR �
   - `WaxDestructible` (`UWaxDestructibleComponent`): 2단계 국소 파괴 필드(`Chaos_Object_Dynamic` 전환 → `Chaos_ExternalClusterStrain` 인가), 리프 잔존율 추적 및 임계 붕괴, 경도 존, 물리 기반 MetaSound 오디오.
 - **전략 로코모션 (`UWaxLocomotionComponent`)**:
   - `UWaxRollingLocomotionComponent`: `BP_WaxBall_Basic`용 실제 변위(`Δp`)·바닥 법선 외적 기반 물리 연동 구르기.
-  - `UWaxButterLocomotionComponent`: `BP_WaxButter`용 `HopAlign → LayDown → TumbleCharge → StandUp` 4단계 FSM 및 전·후면 최단각 양방향 텀블링(`TumbleDirectionSign`).
+  - `UWaxButterLocomotionComponent`: `BP_WaxButter`용 `HopAlign → LayDown → TumbleCharge → StandUp` 4단계 FSM 및 전·후면 최단각 양방향 텀블링(`TumbleDirectionSign`). 굴림 목표는 눕는 순간의 플레이어 위치와 실시간 위치를 `TargetTrackingRatio`로 섞어 정합니다.
 
 ### 3. 핵심 서브시스템 설계
 - **고정 수명 파편 제거 (`RemoveOnBreak`)**: `DF_WaxOrb`, `DF_WaxButter`, `DF_MonsterEye` Dataflow에 `FRemoveOnBreakDataflowNode`(`PostBreakTimer 1.5~2.0s`, `RemovalTimer 0.35~0.45s`, `ScaleOnRemoval=True`)를 삽입하고 `bAllowRemovalOnBreak=true`, `bAllowRemovalOnSleep=false`로 고정해 바닥 잔류 파편·소음을 차단합니다.
@@ -66,6 +76,8 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR �
 | `/Game/WaxPpu/Materials/` | `M_WaxButter`, `M_ButterCore`, `M_JellyCore`, `M_MonsterEye`, `MPC_WaxTargeting` |
 | `/Game/WaxPpu/Physics/` | `PM_JellyBounce` |
 | `/Game/Maps/` | `Lvl_WaxPpuDemo` |
+| `/Game/WaxPpu/Player/` | `BP_WaxPlayer`, `ABP_WaxPlayer`(몸체), `ABP_WaxPlayer_FP`(1인칭 포즈 복사) |
+| `/Game/WaxPpu/Animations/` | `AM_FP_Punch_L/R`(펀치 몽타주), `AS_FP_Punch_L/R` |
 | `/Game/FirstPerson/` | `Blueprints/BP_FirstPersonCharacter`, `BP_FirstPersonGameMode`, `Anims/ABP_FP_Copy` |
 | `/Game/Input/` | `IMC_Default`, `Actions/IA_*` |
 

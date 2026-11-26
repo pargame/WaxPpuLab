@@ -1,6 +1,6 @@
 # 공격 시스템 설계 (기본공격 · 점프공격 · 밀어내기 발차기)
 
-상태: **P0 완료 · P0.5 구현 완료(H3 체감 확인 대기)** (설계: Claude–Gemini 2회 협업 검토 반영)
+상태: **P0 완료 · P0.5 구현 완료(H3 체감 확인 대기)** · 공격 중 방향별 이동 제한 추가(초기값 1.0) · 다음 P1 발차기(H1 애니 다운로드 필요) (설계: Claude–Gemini 2회 협업 검토 반영)
 
 ## 1. 확정된 결정
 
@@ -15,7 +15,7 @@
 | 구현 원칙 | 몽타주 기반 단계 표현. **세부 논리는 C++, 전체 흐름·연출은 디자이너가 수정 가능한 BP/에셋으로 노출** |
 | 1인칭 연출 | FirstPersonMesh는 SKM_Manny 전신(`ABP_WaxPlayer_FP` CopyPoseFromMesh) → 다리 실제 노출 여부는 H0 실측 후 결정 |
 
-## 2. 실측으로 확인한 현재 구조
+## 2. 실측으로 확인한 현재 구조 (설계 시점 기준, 변경 결과는 §6~7)
 
 | 사실 | 근거 | 설계 영향 |
 |---|---|---|
@@ -65,7 +65,7 @@ Montage ─ UWaxAttackHitNotify    (UWaxPunchAnimNotify 일반화, CoreRedirect�
 | C++ → BP 오버라이드 지점 (`BlueprintNativeEvent`, **캐릭터에 선언**) | 흐름 결정 | `SelectAttackMontage(Slot, ResolvedSpec, ComboIndex)`, `CanExecuteAttack(Slot)`(추가 조건), `ResolveRotationProfile(Phase)` — `_Implementation`은 컴포넌트 기본 구현에 위임, 디자이너는 `BP_WaxPlayer`에서만 재정의. 컴포넌트는 오너 캐스트 실패 시 자체 기본 구현으로 폴백. 콤보 인덱스는 선택 직후 C++가 갱신 |
 | C++ → BP 이벤트 (`BlueprintAssignable` 델리게이트) | 연출 | `OnAttackStarted`, `OnAttackPhaseChanged`, `OnAttackHit`(위치·대상·강도), `OnAttackEnded`, `OnBufferConsumed` → 카메라 셰이크·VFX·SFX·히트스톱은 BP 이벤트 그래프에서 구성 |
 | 몽타주 (AnimNotifyState) | 타이밍 | `Active` 구간 1개(앞 = Windup, 뒤 = Recovery 자동 추론), `CancelWindow(AllowedTypes)`, `RotationProfile`(구간별 오버라이드), `AttackHit`(Notify), 슬램 섹션 |
-| DataAsset | 수치 | 공격 Spec, 단계별 기본 회전 프로파일, 전역 Combat 설정(`BufferWindowSec`, `SensitivityBlendSpeed`, `RecoverYawRateDegPerSec`, `RecoverSnapToleranceDeg`, `OffsetFalloffCurve`), 넉백, 반경·강도 |
+| DataAsset | 수치 | 공격 Spec, 단계별 기본 회전·이동 프로파일, 전역 Combat 설정(`BufferWindowSec`, `SensitivityBlendSpeed`, `RecoverYawRateDegPerSec`, `RecoverSnapToleranceDeg`, `OffsetFalloffCurve`), 넉백, 반경·강도 |
 
 원칙: C++에는 수치·에셋 경로·연출 분기를 두지 않는다. 디자이너는 C++ 수정 없이 몽타주 타임라인, DA, BP 이벤트만으로 공격 하나의 체감을 끝까지 조정할 수 있어야 한다.
 
@@ -175,6 +175,8 @@ Montage ─ UWaxAttackHitNotify    (UWaxPunchAnimNotify 일반화, CoreRedirect�
 - 회전 갱신 순서: 감도 블렌드 → 카메라 입력 필터(몸 Yaw 기준 오프셋) → 몸 Yaw가 **필터된** 시선을 추종. 보정 전 시선을 추종하면 몸이 카메라를 앞질러 오프셋이 허용치를 넘음(강한 플릭에서 59° 실측 후 수정). 회전 보정은 Tick 재스케일 방식 유지.
 - 로그 `WaxRot Session`: 연속 공격 묶음(첫 공격 ~ 몸 정렬 완료) 단위로 `maxYawOff`·`maxPitchOff`·`minSens`·`boundaryFrames`(바깥 입력이 경계에서 완전히 막힌 프레임)·`recover`·`stuck` 기록. `recover > RotationStuckWarnSec`(1.0s)이면 고착.
 - 자동 검증(PIE, Python으로 공격 홀드 + 시점 입력 주입): 약한 회전 maxYawOff 14.7 / 강한 플릭 39.1(≤45), maxPitchOff ≤25, recover 0.2s, stuck 0.
+- 자동 검증 한계: 에디터 창이 포커스를 잃으면 백그라운드 절전으로 PIE가 3~4fps로 떨어져 회전 수치가 의미를 잃음(몸이 매 프레임 따라잡아 오프셋 0). 회전·이동 체감 측정은 사람이 포그라운드에서 수행(H3).
+- 공격 중 이동 제한(`FWaxMovementProfile`)은 `UpdateMovementLimit`에서 공격 시작 시점의 `MaxWalkSpeed`를 기준으로 배율 적용. 세션 로그 `minMove`로 확인.
 
 ## 8. 리스크
 
