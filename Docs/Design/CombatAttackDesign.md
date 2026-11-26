@@ -181,7 +181,15 @@ Montage ─ UWaxAttackHitNotify    (UWaxPunchAnimNotify 일반화, CoreRedirect�
 - 공격 중 이동 제한(`FWaxMovementProfile`)은 `UpdateMovementLimit`에서 BeginPlay 때 읽은 `MaxWalkSpeed`를 기준으로 배율 적용. 세션 로그 `minMove`로 확인.
 - 체감 확인(H3): 회전 '적당', 경계 고착 0회. 최종 회전·이동 수치는 사람이 `DA_AttackSet_Unarmed`에서 직접 튜닝(PIE 68연타 maxYawOff 31.6, minMove 0.20, stuck 0).
 
-## 8. 리스크
+## 8. 구현 메모 (P1.5 펀치)
+
+- Mixamo `Punch Combo`(30fps, 66프레임)를 `RTG_Mixamo_To_Manny`(IK Rig 자동 생성·체인 퍼지 매핑)로 Manny에 리타겟 → `AS_MX_PunchCombo`.
+- 손 궤적 분석으로 타격 4회 확인: L 18, R 26, L 33, R 41프레임(최대 신전). 발은 왼발 앞(오소독스).
+- 4구간으로 잘라 `AM_MX_Punch_1~4`(L·R·L·R) 생성, `Basic.Montages`가 순환. 구간 10–22 / 22–30 / 30–37 / 37–52, Active = 타격 −3~+1프레임, CancelWindow = 구간 끝 2프레임(4번만 46–52).
+- 원본 템포 그대로 쓰기 위해 `Basic.PlayRate` 1.65 → 1.0. 슬롯은 아직 `DefaultSlot`(상·하체 슬롯 분리는 P1).
+- Mixamo 파생 에셋은 공개 저장소에 커밋하기로 결정(주인 승인).
+
+## 9. 리스크
 
 - **FirstPersonScale 0.6**: 다리가 보이면 카메라 쪽으로 축소·왜곡될 수 있음 → H0 결과에 따라 하체 HideBone 또는 FP 스케일 예외 처리 검토.
 - **Mixamo 리타겟 품질**: 손가락·루트 이슈 가능 → 루트 트랙 제거, 루트모션 OFF, 본 오차 수치로 후보 선별.
