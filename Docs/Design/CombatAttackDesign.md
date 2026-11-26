@@ -41,7 +41,7 @@ Montage ─ UWaxAttackHitNotify    (UWaxPunchAnimNotify 일반화, CoreRedirect�
 ```
 
 - **슬롯 해석**: `Resolve(Slot) = Weapon && Weapon->Overrides(Slot) ? Weapon->Spec(Slot) : UnarmedSet->Spec(Slot)`. 무기 DA에는 Kick 필드가 아예 없음.
-- **`FWaxAttackSpec`**: `Montages[]`(콤보 순환), `PlayRate`, `CooldownSec`, `StrainScale`, `RadiusScale`, `KnockbackHorizontal/Vertical`, `KnockbackDurationSec`, `DebrisImpulse`, `bSuppressHeadFollow`, `CameraShake`(선택).
+- **`FWaxAttackSpec`**: `Montages[]`(콤보 순환), `PlayRate`, `StrainScale`, `RadiusScale`, `KnockbackHorizontal/Vertical`, `KnockbackDurationSec`, `DebrisImpulse`, `bSuppressHeadFollow`, `CameraShake`(선택).
 - **JumpAttack 전용**: `AerialStrike`(Spec), `Slam`(Spec), `HoldThresholdSec`, `SlamDownwardSpeed`, `SlamMinHeight`(미만이면 공중 강타로 폴백).
 - **애님 슬롯 분리**
   - `UpperBody` 슬롯: 기본공격(하체는 로코모션 유지, 이동 중 펀치 가능).
@@ -55,14 +55,24 @@ Montage ─ UWaxAttackHitNotify    (UWaxPunchAnimNotify 일반화, CoreRedirect�
 
 | 상황 | 규칙 |
 |---|---|
-| 기본공격 | 기존 `IA_WaxCrack`(좌클릭/Space, Pulse 연타) 유지 |
-| 점프공격 | 공중에서 **새로 누른(Started) 입력만** 판정 대상. 지상에서 누른 채 점프한 홀드는 무시하고, 공중에선 Pulse 이벤트도 무시 |
+| 기본공격 | `IA_WaxCrack`(좌클릭/Space). **Pulse 트리거 제거**, `Started`/`Completed`/`Canceled`만 바인딩(`Canceled`도 홀드 해제) |
+| 점프공격 | 공중에서 **새로 누른(Started) 입력만** 판정 대상. 지상에서 누른 채 점프한 홀드는 무시 |
 | 발차기 | 신규 `IA_WaxKick`(기본 F), 지상 전용 |
-| 동시 공격 | 활성 공격은 항상 1개. 입력 버퍼 0.15s(UPROPERTY) |
-| 캔슬 | 기본공격 HitNotify 이후 후딜레이는 발차기로 캔슬 가능. 발차기·슬램은 캔슬 불가 |
+| 동시 공격 | 활성 공격은 항상 1개 |
+| 캔슬 | `UWaxCancelWindowNotifyState`(허용 타입 `AllowedTypes`)로 몽타주에 지정. 기본공격 HitNotify 이후 구간에 `Basic`·`Kick` 허용, 발차기·슬램에는 창 없음 |
 | 이동 | 루트모션 OFF, 이동 허용. 슬램 Loop 동안 AirControl 0 |
 | 공중 강타 중 착지 | 몽타주 블렌드아웃, 판정 미발생 시 그대로 종료 |
 | 카메라 | `bSuppressHeadFollow` 공격 동안 머리 추종 비활성(슬램 착지 시 카메라 함몰 방지) |
+
+### 입력 버퍼 (Claude–Gemini 협업 합의)
+
+- **단일 슬롯, 명시 입력만**: Crack `Started`, Kick 입력만 저장 `{Type, Time}`. 새 입력은 **최신 우선**으로 덮어씀. `BufferWindowSec`(≈0.2s, UPROPERTY) 지나면 만료.
+- **소비 시점**: 유휴면 즉시 / `CancelWindow` 진입 시 / 몽타주 블렌드아웃·종료 시.
+- **소비 시 재검증** `CanExecute(Type, 상태, 현재 창)`
+  - 지금 불가하지만 유효한 항목은 만료까지 유지(예: 창이 `Kick`만 허용할 때 버퍼의 `Basic`).
+  - 상태 변화로 영구 불가해진 항목은 즉시 폐기(예: 지상 `Kick` 버퍼 후 낙하). 착지 시 공중 입력도 폐기.
+- **홀드 연타 = 상태 폴백**: 소비 시점에 버퍼가 비어 있고 `bCrackHeld && bHoldStartedGrounded && !IsFalling()`이면 `Basic`을 이어감. 우선순위가 가장 낮으므로 홀드 중 누른 F가 덮어써지지 않고, 공중에서 시작한 홀드는 착지 후 연타로 이어지지 않음.
+- **쿨다운 폐기**: `PunchCooldownSec`·Spec 쿨다운을 없애고 템포는 몽타주 창이 결정. P0 회귀 기준을 맞추기 위해 기존 펀치 몽타주의 `Basic` 창을 기존 템포(실시간 0.34s, PlayRate 1.65 기준 몽타주 시간 약 0.56s)에 배치.
 
 ## 4. 검증 체계
 
@@ -74,7 +84,7 @@ Montage ─ UWaxAttackHitNotify    (UWaxPunchAnimNotify 일반화, CoreRedirect�
 | 타격 프레임 자동 제안 | Python으로 애니의 손/발 본 궤적을 샘플링해서 최대 신전·속도 피크 프레임을 계산하고 HitNotify 초기 위치로 사용 |
 | 후보 애니 1차 선별 | 길이, 루트 변위, 발 최고 높이, 리타겟 후 본 오차를 수치로 비교해 사람에게 최대 2개만 제시 |
 | 자동 캡처 | 개발용 Exec `WaxAttackCapture <Slot>`: 3인칭 프리뷰에서 `Montage_SetPosition` + Pause로 노티파이 전후 프레임을 고정하고 `HighResShot`. `-game -ExecCmds`로 AI가 직접 실행하고 콘택트시트를 판독(실패 시 사람이 PIE에서 명령 1줄 입력) |
-| 구조화 로그 | `LogWaxCombat`: 공격 시작/슬롯/몽타주, 히트 위치·대상 수·넉백 속도, 점프 최고점·슬램 낙하 높이, 탭/홀드 판정값 |
+| 구조화 로그 | `LogWaxCombat`: 공격 시작/슬롯/몽타주, 버퍼 저장·덮어쓰기·소비·만료·폐기 사유, 히트 위치·대상 수·넉백 속도, 점프 최고점·슬램 낙하 높이, 탭/홀드 판정값 |
 
 ### 사람에게 맡기는 일 (AI가 할 수 없는 것만)
 
@@ -107,7 +117,7 @@ Montage ─ UWaxAttackHitNotify    (UWaxPunchAnimNotify 일반화, CoreRedirect�
 
 | 단계 | 내용 | AI 검증 | 사람 | 통과 기준 |
 |---|---|---|---|---|
-| P0 기반 | Python·EditorScriptingUtilities 활성화(에디터 전용), Combat 컴포넌트, AttackSet DA, Notify 일반화, ABP 슬롯 분리, 펀치 이전, 캡처 Exec, 몬스터 넉백 API | 빌드, 헤드리스 검증 스크립트 동작, 펀치 노티파이 호환, 캡처 성공 | H0, H4, H3(펀치 회귀만) | 펀치 체감 변화 없음, 검증 스크립트 PASS |
+| P0 기반 | Python·EditorScriptingUtilities 활성화(에디터 전용), Combat 컴포넌트(입력 버퍼), AttackSet DA, Hit/CancelWindow Notify, IA_WaxCrack Pulse 제거, ABP 슬롯 분리, 펀치 이전, 캡처 Exec, 몬스터 넉백 API | 빌드, 헤드리스 검증 스크립트 동작, 펀치 노티파이 호환, 캡처 성공 | H0, H4, H3(펀치 회귀만) | 펀치 체감 변화 없음, 검증 스크립트 PASS |
 | P1 발차기 | IA_WaxKick, 리타겟, AM_Kick(FullBody), 넉백/파편 | 후보 선별, 프레임 제안, 캡처, 로그(넉백 속도·대상 수) | H1, H2, H3 | H3 평균 ≥4, 씹힘 없음, 넉백이 로코모션에 상쇄되지 않음 |
 | P2 점프공격 | 탭/홀드 판정, 공중 강타, 슬램 섹션, 높이 폴백 | 점프 최고점 실측 후 `SlamMinHeight` 결정, 캡처, 로그 | H2, H3 | 탭/홀드 오판 0회(10회 시도), 지상 홀드 후 점프 시 슬램 미발동 |
 | P3 무기 스왑 골격 | `UWaxWeaponDataAsset`, 더미 무기 DA(엔진 기본 메시 + 소켓, ①·② 수치만 변경), 장착 토글 개발키 | 슬롯 해석 로그, 무기 소켓 원점 디버그 구 | H3(스왑 전후 비교) | ①·②만 바뀌고 ③ 동일, 타격 원점이 무기 소켓 |
