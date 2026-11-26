@@ -23,5 +23,4 @@
 
 - **헤드리스 에셋 검증**: `UnrealEditor-Cmd WaxPpuLab.uproject -run=pythonscript -script=<절대경로>/Scripts/validate_attacks.py -unattended -nullrhi` → `WAXVAL PASS|FAIL` 로그. 스크립트 경로는 절대경로여야 하고, `print` 대신 `unreal.log_warning`을 써야 로그에 남는다.
 - **공격 프레임 캡처**: `UnrealEditor.app/Contents/MacOS/UnrealEditor WaxPpuLab.uproject -game -windowed -WaxCapture=<Basic|AerialStrike|Slam|Kick> -WaxCaptureQuit` → `Saved/Screenshots/MacEditor/WaxCapture/`. `python3 Scripts/contact_sheet.py <폴더>`로 콘택트시트 생성.
-- 위 명령은 모두 `ue-on` 상태(Xcode `DEVELOPER_DIR`)에서 실행한다. 미적용 시 빌드는 SDK 검증 실패, 게임 실행은 Metal 셰이더 단계에서 "Xcode를 찾지 못함"으로 종료된다.
 - `PythonScriptPlugin`, `EditorScriptingUtilities`를 `.uproject`에 에디터 전용으로 활성화해 두었다(엔진 기본 비활성).
