@@ -1,6 +1,6 @@
 # 공격 시스템 설계 (기본공격 · 점프공격 · 밀어내기 발차기)
 
-상태: **P0 완료 · P0.5 완료(회전·이동 제한 체감 튜닝 반영)** · 다음 P1 발차기(H1 애니 다운로드 필요) (설계: Claude–Gemini 2회 협업 검토 반영)
+상태: **P0 완료 · P0.5 완료 · P1 진행 중(넉백 API·발차기 입력·파편 임펄스 코드 완료, H1 애니 다운로드 대기)** · 다음 P1.5 펀치·스탠스 (설계: Claude–Gemini 2회 협업 검토 반영)
 
 ## 1. 확정된 결정
 
@@ -13,6 +13,7 @@
 | 발차기 효과 | 넉백 + 약한 Strain 파괴 + 주변 파편 임펄스 |
 | 공격 중 회전 | 혼합: 몸·타격 방향은 단계별 최대 회전속도(Yaw/Pitch) 제한, 카메라는 타격 구간에서만 감도 배율 하향 |
 | 구현 원칙 | 몽타주 기반 단계 표현. **세부 논리는 C++, 전체 흐름·연출은 디자이너가 수정 가능한 BP/에셋으로 노출** |
+| 펀치·스탠스 (P1.5) | 펀치를 Mixamo 애니로 교체, 한 손 애니는 Mirror Data Table로 반대 손 생성. 공격 중 하체는 **오소독스(왼발 앞) 파이팅 스탠스** 발놀림, 비공격 저속 이동은 일반 걷기. 사우스포는 미러로 대응 |
 | 1인칭 연출 | FirstPersonMesh는 SKM_Manny 전신(`ABP_WaxPlayer_FP` CopyPoseFromMesh) → 다리 실제 노출 여부는 H0 실측 후 결정 |
 
 ## 2. 실측으로 확인한 현재 구조 (설계 시점 기준, 변경 결과는 §6~7)
@@ -128,9 +129,9 @@ Montage ─ UWaxAttackHitNotify    (UWaxPunchAnimNotify 일반화, CoreRedirect�
 - 회신: `보임/안 보임`, 보이면 `자연스러움/왜곡됨/카메라에 파묻힘` 중 택1. 가능하면 스크린샷 1장.
 
 **H1. 애니 소스 다운로드** (5~10분, 로그인 필요)
-- Mixamo 검색어: `Front Kick` 2~3개, `Jump Attack` / `Ground Slam` 2~3개.
+- Mixamo 검색어: `Front Kick`·`Push Kick` 2~3개, `Jump Attack` / `Ground Slam` 2~3개, (P1.5) `Boxing`·`Jab`·`Cross`·`Punching` 2~3개, `Boxing Idle`, `Boxing Step Forward/Backward/Left/Right`(또는 `Strafe`).
 - 설정: FBX Binary, 30fps, Keyframe Reduction none, In Place 옵션이 있으면 체크. 첫 파일만 With Skin. 루트 이동은 AI가 제거하므로 In Place가 없어도 무방.
-- 저장 위치: `SourceArt/Mixamo/` (gitignore 처리 완료, 원본 재배포 방지).
+- 저장 위치: `SourceArt/Mixamo/` (gitignore 처리 완료, 원본 재배포 방지). 라이선스: Mixamo 애니는 Adobe 계정으로 받아 개인·상업 프로젝트에 로열티 없이 사용 가능하나, 애니 파일 자체를 단독 재배포·판매할 수는 없음. 공개 저장소에 임포트된 `.uasset`이 올라가는 것은 회색지대라 공개 범위는 별도 결정.
 - 회신: `완료`.
 
 **H2. 최종 후보·타격 프레임 확인** (공격당 1분)
@@ -156,6 +157,7 @@ Montage ─ UWaxAttackHitNotify    (UWaxPunchAnimNotify 일반화, CoreRedirect�
 | P0 기반 | Python·EditorScriptingUtilities 활성화(에디터 전용), Combat 컴포넌트(입력 버퍼·단계 FSM·회전 제한 구조·이벤트), 캐릭터 흐름 훅, AttackSet DA, `AttackHit`/`Active`/`CancelWindow`/`RotationProfile` Notify, IA_WaxCrack Pulse 제거, 펀치 이전, 판정 원점 몸 메시 통일, DoMove Control Yaw 기준, 캡처 Exec | 빌드, 헤드리스 검증 스크립트 동작, 펀치 노티파이 호환, 판정 위치 디버그 구 비교, 캡처 성공 | H0, H3(펀치 회귀만) | 펀치 체감 변화 없음, 판정 위치 동일, 검증 스크립트 PASS (회전 제한 기본값 = 무제한) |
 | P0.5 회전 제한 | 단계별 회전 프로파일 활성화, 소프트 클램프 튜닝 | 로그(몸·카메라 오프셋 최대치, 실효 감도) | H3(회전 문항 포함) | 회전 문항 '적당', 경계 고착 0회 |
 | P1 발차기 | IA_WaxKick, 리타겟, ABP 슬롯 분리(UpperBody/FullBody, 펀치 몽타주 UpperBody 이전, 검증 스크립트 슬롯명 규칙 추가), AM_Kick(FullBody), 몬스터 넉백 API(`ReceiveKnockback`·`SuspendFor`), 파편 임펄스 | 후보 선별, 프레임 제안, 캡처, 로그(넉백 속도·대상 수) | H1, H2, H3 | H3 평균 ≥4, 씹힘 없음, 넉백이 로코모션에 상쇄되지 않음 |
+| P1.5 펀치·스탠스 | Mixamo 펀치(L/R, 한쪽만 있으면 미러) 교체, ABP 하체 스탠스 상태(Combat 상태 bool + 유지 시간 블렌드), 스탠스 이동 블렌드스페이스(앞·뒤·좌·우 스텝) | 후보 선별, 프레임 제안, 발 미끄러짐 수치(이동 속도 vs 애니 보폭) | H2, H3 | 공격 중 발이 스탠스 유지, 저속 이동 시 발 미끄러짐 없음 |
 | P2 점프공격 | 탭/홀드 판정, 공중 강타, 슬램 섹션, 높이 폴백 | 점프 최고점 실측 후 `SlamMinHeight` 결정, 캡처, 로그 | H2, H3 | 탭/홀드 오판 0회(10회 시도), 지상 홀드 후 점프 시 슬램 미발동 |
 | P3 무기 스왑 골격 | `UWaxWeaponDataAsset`(①·`FWaxJumpAttackSpec` 오버라이드), 더미 무기 DA(엔진 기본 메시 + 소켓, ①·② 수치만 변경), FP·몸 메시 양쪽 부착, 장착 토글 개발키 | 슬롯 해석 로그, 무기 소켓 원점 디버그 구 | H3(스왑 전후 비교) | ①·②만 바뀌고 ③ 동일, 타격 원점이 무기 소켓 |
 
