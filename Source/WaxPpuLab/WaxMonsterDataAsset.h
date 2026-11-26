@@ -147,6 +147,10 @@ struct FWaxButterLocomotionSettings
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tumble", meta = (ClampMin = "15.0", ClampMax = "180.0"))
 	float AbortAngleDeg = 55.0f;
+
+	/** 켜면 눕는 순간의 플레이어 위치를 목표로 고정하고 방향 보정 없이 그 지점(StopDistanceToPlayer 앞)까지만 구른 뒤 일어섬. 끄면 매 굴림마다 플레이어를 다시 보고 방향을 보정 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tumble")
+	bool bLockTargetOnLayDown = true;
 };
 
 UCLASS(BlueprintType)
