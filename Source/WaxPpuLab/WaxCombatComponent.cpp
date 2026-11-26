@@ -327,7 +327,7 @@ bool UWaxCombatComponent::StartAttack(EWaxAttackSlot Slot, bool bFromBuffer)
 	AnimInst->Montage_SetBlendingOutDelegate(BlendOutDelegate, Montage);
 
 	LastStartedSlot = Slot;
-	ComboIndex = (MontageIndex + 1) % NumMontages;
+	ComboIndex = (MontageIndex + 1 < NumMontages) ? MontageIndex + 1 : FMath::Clamp(Spec->ComboLoopStartIndex, 0, NumMontages - 1);
 
 	// 회전 통계는 연속 공격 묶음(첫 공격 ~ 몸 정렬 완료) 단위로 집계
 	if (!bRotSessionActive)

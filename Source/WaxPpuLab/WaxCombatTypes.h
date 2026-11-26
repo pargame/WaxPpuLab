@@ -113,6 +113,10 @@ struct FWaxAttackSpec
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack")
 	TArray<TObjectPtr<UAnimMontage>> Montages;
 
+	/** 마지막 몽타주 다음에 이어질 인덱스. 0이면 처음부터 순환, 1이면 0번은 첫 타(시작 동작) 전용이고 1번부터 무한 반복 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack", meta = (ClampMin = "0"))
+	int32 ComboLoopStartIndex = 0;
+
 	/** 몽타주 재생 속도 배율 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attack", meta = (ClampMin = "0.1"))
 	float PlayRate = 1.0f;
