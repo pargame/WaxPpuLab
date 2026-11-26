@@ -1,6 +1,6 @@
 # 공격 시스템 설계 (기본공격 · 점프공격 · 밀어내기 발차기)
 
-상태: **설계 확정 대기** (구현 착수 전, 1차 검토 반영)
+상태: **설계 확정** (Claude–Gemini 2회 협업 검토 반영, 구현 착수 전)
 
 ## 1. 확정된 결정
 
@@ -21,9 +21,10 @@
 |---|---|---|
 | 몽타주는 몸체 메시(`ABP_WaxPlayer`)에서 재생, FP 메시는 포즈 복사만 | `ABP_WaxPlayer_FP` = `CopyPoseFromMesh` | 노티파이는 몸체 메시에서 1회만 발생(중복 없음) |
 | 펀치 몽타주 슬롯 = `DefaultSlot`, ABP에 `LayeredBoneBlend(BranchFilter)` 존재 | `AM_FP_Punch_*`, `ABP_WaxPlayer` 문자열 | DefaultSlot이 상체 마스크 뒤에 있으면 **발차기·슬램 다리가 재생되지 않음** → 슬롯 분리 필요 (§3) |
-| 몬스터 이동 = 매 틱 `AddMovementInput` (CharacterMovement) | `WaxLocomotionComponent.cpp:82` | 넉백 중에도 이동 입력이 계속 들어와 넉백을 상쇄 → 일시 정지 API 필요 |
+| 몬스터 이동: 구르기 = 매 틱 `AddMovementInput`, 버터 = FSM이 `AddActorWorldOffset`로 직접 이동 | `WaxLocomotionComponent.cpp:82, 479, 523, 588` | 입력만 막으면 넉백이 상쇄됨 → 로코모션 틱 전체 일시 정지 필요 |
+| 플레이어 이동 기준이 액터 전방 | `WaxPpuLabCharacter.cpp:169-170` | 공격 중 몸 Yaw가 지연되면 WASD가 쏠림 → Control Yaw 기준으로 변경 |
 | `PythonScriptPlugin`은 기본 비활성이고 `.uproject`에 등록되어 있지 않음 | 엔진 `.uplugin` `EnabledByDefault: false` | 헤드리스 검증·에셋 자동화의 **선행조건** → P0에서 활성화 |
-| 타격 원점은 FP 메시 / 몸체 메시 본만 탐색 | `HandlePunchImpactNotify` | 무기 소켓에서 타격 원점을 잡을 수 없음 → 원점 소스 확장 |
+| 타격 원점은 FP 메시 소켓 우선, 없으면 몸 메시 | `WaxPpuLabCharacter.cpp:434-441` | FP 메시는 3인칭 프리뷰에서 숨겨져 소켓 갱신이 멈출 수 있고 종속 메시라 포즈 지연 소지 → **판정은 몸 메시 기준으로 통일**, 무기 소켓 원점 추가 |
 
 ## 3. 아키텍처
 
@@ -42,44 +43,54 @@ Montage ─ UWaxAttackHitNotify    (UWaxPunchAnimNotify 일반화, CoreRedirect�
                   └─ 마커/디버그 구 (기존 MPC 마커 재사용)
 ```
 
-- **슬롯 해석**: `Resolve(Slot) = Weapon && Weapon->Overrides(Slot) ? Weapon->Spec(Slot) : UnarmedSet->Spec(Slot)`. 무기 DA에는 Kick 필드가 아예 없음.
-- **`FWaxAttackSpec`**: `Montages[]`(콤보 순환), `PlayRate`, `StrainScale`, `RadiusScale`, `KnockbackHorizontal/Vertical`, `KnockbackDurationSec`, `DebrisImpulse`, `bSuppressHeadFollow`, `CameraShake`(선택).
-- **JumpAttack 전용**: `AerialStrike`(Spec), `Slam`(Spec), `HoldThresholdSec`, `SlamDownwardSpeed`, `SlamMinHeight`(미만이면 공중 강타로 폴백).
+- **슬롯 해석(C++ 고정)**: `Resolve(Slot) = Weapon && Weapon->Overrides(Slot) ? Weapon->Spec(Slot) : UnarmedSet->Spec(Slot)`. 무기 DA에는 Kick 필드가 아예 없음.
+- **`FWaxAttackSpec`**: `Montages[]`(콤보 순환), `PlayRate`, `StrainScale`, `RadiusScale`, `ForwardOffset`, `KnockbackHorizontal/Vertical`, `KnockbackDurationSec`, `DebrisImpulse`, `DebrisImpulseRadius`, `bSuppressHeadFollow`, `CameraShake`(선택).
+- **`FWaxJumpAttackSpec`** (Unarmed DA·무기 DA 공유): `AerialStrike`(Spec), `Slam`(Spec), `HoldThresholdSec`, `SlamDownwardSpeed`, `SlamMinHeight`(미만이면 공중 강타로 폴백), `SlamAirControl`, `SlamLandSectionName`(FName).
+- **배율 합성**: 최종값 = 캐릭터/DA 기본 × Spec × Notify (곱). Notify 배율은 한 몽타주 내 타격별 강약용.
+- **입력 슬롯 enum**: `{Basic, AerialStrike, Slam, Kick}`.
 - **애님 슬롯 분리**
   - `UpperBody` 슬롯: 기본공격(하체는 로코모션 유지, 이동 중 펀치 가능).
   - `FullBody` 슬롯: 발차기, 공중 강타, 슬램(LayeredBoneBlend 뒤, 최종 출력 직전).
   - 기존 펀치 몽타주의 `DefaultSlot`은 `UpperBody`로 이전.
 - **슬램 섹션**: `Start → Loop → Land`. 캐릭터 `LandedDelegate`를 Combat이 구독해서 `Montage_JumpToSection("Land")`를 호출하고, Land의 HitNotify가 발밑 광역 판정을 냄.
-- **몬스터 넉백**: `AWaxMonsterBase::ReceiveKnockback`이 `LaunchCharacter` + `Locomotion->SuspendFor(Duration)`을 호출(평탄 계층 규칙과 무관한 베이스 API 추가). 버터 FSM은 진행 중 단계를 중단하지 않고 입력만 멈춤.
+- **몬스터 넉백**: `AWaxMonsterBase::ReceiveKnockback`이 `LaunchCharacter` + `Locomotion->SuspendFor(Duration)` 호출. `SuspendFor` 동안 로코모션 틱 전체 정지, 버터는 재개 시 `HopAlign`부터 재진입.
+- **타격 원점**: 항상 몸 메시(`GetMesh()`) 본/소켓 또는 몸 메시에 부착된 무기 메시 소켓. 무기 메시는 FP 메시·몸 메시 양쪽에 부착(가시성용), 판정은 몸 쪽만.
 - **AGENTS.md 준수**: `/Game/` 하드코딩 0건, 수치는 전부 DA/UPROPERTY, 런타임 복사 필드는 `VisibleInstanceOnly`.
 
 ### C++ / BP / 에셋 책임 분리
 
 | 계층 | 소유 | 내용 |
 |---|---|---|
-| C++ (`UWaxCombatComponent`, `Blueprintable`) | 세부 논리 | 입력 버퍼, `CanExecute` 재검증, 단계 FSM 전이(`Idle→Windup→Active→Recovery`), 히트 판정·대상 중복 제거, 넉백, 회전 제한 계산 |
-| C++ → BP 오버라이드 지점 (`BlueprintNativeEvent`) | 흐름 결정 | `SelectAttackSpec(Slot, Context)`(콤보·무기 분기), `CanExecuteAttack(Type)`(추가 조건), `ResolveRotationProfile(Phase)` — 기본 구현은 C++, 디자이너가 `BPC_WaxCombat`에서 재정의 가능 |
+| C++ (`UWaxCombatComponent`, 캐릭터가 `CreateDefaultSubobject`) | 세부 논리 | 입력 버퍼, `CanExecute` 재검증, 단계 FSM 전이(`Idle→Windup→Active→Recovery`), 히트 판정·대상 중복 제거, 넉백, 회전 제한 계산 |
+| C++ → BP 오버라이드 지점 (`BlueprintNativeEvent`, **캐릭터에 선언**) | 흐름 결정 | `SelectAttackMontage(Slot, ResolvedSpec, ComboIndex)`, `CanExecuteAttack(Slot)`(추가 조건), `ResolveRotationProfile(Phase)` — `_Implementation`은 컴포넌트 기본 구현에 위임, 디자이너는 `BP_WaxPlayer`에서만 재정의. 컴포넌트는 오너 캐스트 실패 시 자체 기본 구현으로 폴백. 콤보 인덱스는 선택 직후 C++가 갱신 |
 | C++ → BP 이벤트 (`BlueprintAssignable` 델리게이트) | 연출 | `OnAttackStarted`, `OnAttackPhaseChanged`, `OnAttackHit`(위치·대상·강도), `OnAttackEnded`, `OnBufferConsumed` → 카메라 셰이크·VFX·SFX·히트스톱은 BP 이벤트 그래프에서 구성 |
-| 몽타주 (AnimNotifyState) | 타이밍 | `Windup`/`Active`/`Recovery` 구간, `CancelWindow(AllowedTypes)`, `RotationProfile`(구간별 오버라이드), `AttackHit`(Notify), 슬램 섹션 |
-| DataAsset | 수치 | 공격 Spec, 단계별 기본 회전 프로파일, 버퍼 시간, 넉백, 반경·강도 |
+| 몽타주 (AnimNotifyState) | 타이밍 | `Active` 구간 1개(앞 = Windup, 뒤 = Recovery 자동 추론), `CancelWindow(AllowedTypes)`, `RotationProfile`(구간별 오버라이드), `AttackHit`(Notify), 슬램 섹션 |
+| DataAsset | 수치 | 공격 Spec, 단계별 기본 회전 프로파일, 전역 Combat 설정(`BufferWindowSec`, `SensitivityBlendSpeed`, `RecoverYawRateDegPerSec`, `RecoverSnapToleranceDeg`, `OffsetFalloffCurve`), 넉백, 반경·강도 |
 
 원칙: C++에는 수치·에셋 경로·연출 분기를 두지 않는다. 디자이너는 C++ 수정 없이 몽타주 타임라인, DA, BP 이벤트만으로 공격 하나의 체감을 끝까지 조정할 수 있어야 한다.
 
 ### 공격 중 회전 제한 (혼합)
 
-- **몸(Yaw)**: 공격 동안 `bUseControllerRotationYaw = false`. 몸 Yaw는 컨트롤 Yaw를 향해 `MaxYawRateDegPerSec`로 등속 추종. 카메라와의 차이가 `MaxBodyCameraYawOffsetDeg`를 넘으면 경계에서 몸을 끌고 감(팔이 화면 밖으로 빠지지 않게). 공격이 끝나면 `RecoverYawRateDegPerSec`로 정렬한 뒤 컨트롤 추종을 복귀.
-- **상반신(Pitch)**: 기존 `SmoothedAimPitch` 보간 위에 `MaxPitchRateDegPerSec` 상한 추가(공격 중에만).
-- **카메라 감도**: `DoAim` 입력에 `CameraSensitivityScale` 곱함. 급변을 막기 위해 `SensitivityBlendSpeed`로 블렌드. 기본은 Active만 하향(예: 0.5), 나머지 1.0.
-- **타격 방향**: 카메라 전방이 아니라 **몸 Yaw + 상반신 Pitch**로 산출(현재 `HandlePunchImpactNotify`의 카메라 전방 사용을 교체). 보이는 팔과 판정 방향을 일치시킴.
-- **프로파일 해석**: `RotationProfile` NotifyState 오버라이드 → DA 단계별 기본값 → 비공격 시 제한 없음. `FWaxRotationProfile = {MaxYawRate, MaxPitchRate, MaxBodyCameraYawOffset, CameraSensitivityScale}`.
-- 슬램 Loop는 Yaw 0(방향 고정), 발차기 Active는 Yaw 0 + 감도 0.3을 초기값으로 두고 H3으로 튜닝.
+- **몸(Yaw)**: 공격 동안 `bUseControllerRotationYaw = false`. 몸 Yaw는 컨트롤 Yaw를 향해 `MaxYawRateDegPerSec`로 등속 추종. 공격 종료 후 `RecoverYawRateDegPerSec`로 정렬하고 `RecoverSnapToleranceDeg` 이내면 컨트롤 추종 복귀. 복귀 중 다음 공격이 오면 현재 몸 Yaw에서 연속 진행(스냅 없음).
+- **상반신(Pitch)**: 목표 = `Clamp(ControlPitch, ±MaxUpperBodyPitchDeg)`. 공격 중에는 `MaxPitchRateDegPerSec` 상한으로 추종. 타격 Pitch는 실제 상반신 Pitch.
+- **카메라 소프트 클램프**(하드 스톱 없음): `DoAim`의 축별 실효 감도
+  - 오프셋이 **커지는 방향**: `CameraSensitivityScale × OffsetFalloffCurve(|오프셋| / MaxOffset)` + 1프레임 플릭이 `MaxOffset`을 넘지 않도록 적용 델타 상한 클램프.
+  - 오프셋이 **줄어드는 방향**(몸 쪽 복귀): `CameraSensitivityScale`만 적용(경계 고착 방지).
+  - 오프셋 정의: Yaw = `ControlYaw - BodyYaw`, Pitch = `Clamp(ControlPitch, ±MaxUpperBodyPitchDeg) - SmoothedAimPitch`(±45° 밖 조준 시 오작동 방지).
+  - 폴백: 커브가 null이면 선형(1 - t), `MaxOffset <= 0`이면 오프셋 제한 없음.
+  - 감도 변화는 `SensitivityBlendSpeed`로 블렌드.
+- **이동**: `DoMove`는 Control Yaw 기준(항상 시선 기준 이동).
+- **타격 방향**: 카메라 전방이 아니라 몸 Yaw + 상반신 Pitch로 산출(보이는 팔과 판정 방향 일치).
+- **프로파일**: `FWaxRotationProfile = {MaxYawRateDegPerSec, MaxPitchRateDegPerSec, MaxBodyCameraYawOffsetDeg, MaxBodyCameraPitchOffsetDeg, CameraSensitivityScale}`. 해석 순서: `RotationProfile` NotifyState 오버라이드 → DA 단계별 기본값 → 비공격 시 제한 없음. 아래 초기값은 모두 DA 기본값이며 소스 상수가 아님.
+- 초기값(H3로 튜닝): 기본공격 Active 감도 0.5, 발차기 Active Yaw 0 + 감도 0.3, 슬램 Loop Yaw 0.
 
 ### 입력 및 상태 규칙
 
 | 상황 | 규칙 |
 |---|---|
 | 기본공격 | `IA_WaxCrack`(좌클릭/Space). **Pulse 트리거 제거**, `Started`/`Completed`/`Canceled`만 바인딩(`Canceled`도 홀드 해제) |
-| 점프공격 | 공중에서 **새로 누른(Started) 입력만** 판정 대상. 지상에서 누른 채 점프한 홀드는 무시 |
+| 점프공격 | 공중에서 **새로 누른(Started) 입력만** 판정 대상. 지상에서 누른 채 점프한 홀드는 무시. 탭/홀드 확정 전 **보류 상태**는 버퍼와 별개(보류 중 버퍼는 비어 있음). 보류 중 착지하면 보류 폐기 |
+| 공중 F | 발차기는 지상 전용이라 공중 입력은 버퍼에 넣지 않음 |
 | 발차기 | 신규 `IA_WaxKick`(기본 F), 지상 전용 |
 | 동시 공격 | 활성 공격은 항상 1개 |
 | 캔슬 | `UWaxCancelWindowNotifyState`(허용 타입 `AllowedTypes`)로 몽타주에 지정. 기본공격 HitNotify 이후 구간에 `Basic`·`Kick` 허용, 발차기·슬램에는 창 없음 |
@@ -141,10 +152,11 @@ Montage ─ UWaxAttackHitNotify    (UWaxPunchAnimNotify 일반화, CoreRedirect�
 
 | 단계 | 내용 | AI 검증 | 사람 | 통과 기준 |
 |---|---|---|---|---|
-| P0 기반 | Python·EditorScriptingUtilities 활성화(에디터 전용), Combat 컴포넌트(입력 버퍼·단계 FSM·회전 제한·BP 오버라이드/이벤트), `BPC_WaxCombat`, AttackSet DA, Hit/CancelWindow Notify, IA_WaxCrack Pulse 제거, ABP 슬롯 분리, 펀치 이전, 캡처 Exec, 몬스터 넉백 API | 빌드, 헤드리스 검증 스크립트 동작, 펀치 노티파이 호환, 캡처 성공 | H0, H4, H3(펀치 회귀만) | 펀치 체감 변화 없음, 검증 스크립트 PASS |
-| P1 발차기 | IA_WaxKick, 리타겟, AM_Kick(FullBody), 넉백/파편 | 후보 선별, 프레임 제안, 캡처, 로그(넉백 속도·대상 수) | H1, H2, H3 | H3 평균 ≥4, 씹힘 없음, 넉백이 로코모션에 상쇄되지 않음 |
+| P0 기반 | Python·EditorScriptingUtilities 활성화(에디터 전용), Combat 컴포넌트(입력 버퍼·단계 FSM·회전 제한 구조·이벤트), 캐릭터 흐름 훅, AttackSet DA, `AttackHit`/`Active`/`CancelWindow`/`RotationProfile` Notify, IA_WaxCrack Pulse 제거, ABP 슬롯 분리, 펀치 이전, 판정 원점 몸 메시 통일, DoMove Control Yaw 기준, 캡처 Exec | 빌드, 헤드리스 검증 스크립트 동작, 펀치 노티파이 호환, 판정 위치 디버그 구 비교, 캡처 성공 | H0, H4, H3(펀치 회귀만) | 펀치 체감 변화 없음, 판정 위치 동일, 검증 스크립트 PASS (회전 제한 기본값 = 무제한) |
+| P0.5 회전 제한 | 단계별 회전 프로파일 활성화, 소프트 클램프 튜닝 | 로그(몸·카메라 오프셋 최대치, 실효 감도) | H3(회전 문항 포함) | 회전 문항 '적당', 경계 고착 0회 |
+| P1 발차기 | IA_WaxKick, 리타겟, AM_Kick(FullBody), 몬스터 넉백 API(`ReceiveKnockback`·`SuspendFor`), 파편 임펄스 | 후보 선별, 프레임 제안, 캡처, 로그(넉백 속도·대상 수) | H1, H2, H3 | H3 평균 ≥4, 씹힘 없음, 넉백이 로코모션에 상쇄되지 않음 |
 | P2 점프공격 | 탭/홀드 판정, 공중 강타, 슬램 섹션, 높이 폴백 | 점프 최고점 실측 후 `SlamMinHeight` 결정, 캡처, 로그 | H2, H3 | 탭/홀드 오판 0회(10회 시도), 지상 홀드 후 점프 시 슬램 미발동 |
-| P3 무기 스왑 골격 | `UWaxWeaponDataAsset`, 더미 무기 DA(엔진 기본 메시 + 소켓, ①·② 수치만 변경), 장착 토글 개발키 | 슬롯 해석 로그, 무기 소켓 원점 디버그 구 | H3(스왑 전후 비교) | ①·②만 바뀌고 ③ 동일, 타격 원점이 무기 소켓 |
+| P3 무기 스왑 골격 | `UWaxWeaponDataAsset`(①·`FWaxJumpAttackSpec` 오버라이드), 더미 무기 DA(엔진 기본 메시 + 소켓, ①·② 수치만 변경), FP·몸 메시 양쪽 부착, 장착 토글 개발키 | 슬롯 해석 로그, 무기 소켓 원점 디버그 구 | H3(스왑 전후 비교) | ①·②만 바뀌고 ③ 동일, 타격 원점이 무기 소켓 |
 
 실제 무기 메시·전용 애니는 P3 이후 별도 트랙.
 
