@@ -195,7 +195,9 @@ Montage ─ UWaxAttackHitNotify    (UWaxPunchAnimNotify 일반화, CoreRedirect�
 
 - 후보 3종 리타겟: `Kicking`(앞으로 약 170cm 이동하는 2연속 킥, 제외), `Zombie Kicking`(채택), `Zombie Kicking-2`.
 - `AS_MX_Kick_Front`: `Zombie Kicking` 6–48프레임, 오른발 최대 전진(26프레임, 발끝 `ball_r`)에 타격. 좀비 팔은 팔·손 54본을 펀치 가드 자세(`AS_MX_Punch_1` 0프레임)로 고정해 교체.
-- 몽타주 `AM_MX_Kick_Front`: Active = 타격 −3~+2프레임, CancelWindow 없음.
+- 몽타주 `AM_MX_Kick_Front`(`FullBody` 슬롯): Active = 타격 −3~+2프레임, CancelWindow 없음.
+- ABP 슬롯: 기존 `DefaultSlot`은 상체 `LayeredBoneBlend` 입력 쪽이라 상체 전용으로 유지(펀치). 블렌드 출력 뒤에 `FullBody` Slot 노드를 추가(`MainStates → [DefaultSlot] → LayeredBoneBlend → FullBody → LocalToComponent`). 타격 순간 `ball_r` 높이 바닥 기준 −0.3 → 114cm로 다리 재생 확인.
+- 주의: Python으로 BP 클래스 CDO만 바꾸면 PIE 스폰 인스턴스에 반영되지 않음 → `BlueprintEditorLibrary.compile_blueprint` 후 저장해야 함(KickAction 누락 원인).
 - DA 초기값(H3로 튜닝): PlayRate 1.3, StrainScale 0.5, RadiusScale 1.3, 넉백 수평 900 / 수직 250cm/s, 정지 0.6s, 파편 600 / 위 200cm/s, 반경 160. 회전 Active Yaw 0·감도 0.3, 이동 0.2 / 0 / 0.3, 점프 불가.
 
 ## 10. 리스크
