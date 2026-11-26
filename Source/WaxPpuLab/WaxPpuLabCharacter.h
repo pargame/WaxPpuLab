@@ -14,6 +14,7 @@ class UCameraComponent;
 class UInputAction;
 class UWaxCombatComponent;
 class AWaxMonsterBase;
+class UWaxPlayerDataAsset;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -119,24 +120,28 @@ public:
 	virtual bool CanExecuteAttack_Implementation(EWaxAttackSlot Slot) override;
 	virtual FWaxRotationProfile ResolveRotationProfile_Implementation(EWaxAttackSlot Slot, EWaxAttackPhase Phase, const FWaxRotationProfile& DefaultProfile) override;
 
+	/** 플레이어 튜닝 수치 에셋. 아래 VisibleInstanceOnly 필드는 BeginPlay에서 이 에셋 값으로 덮어쓰는 런타임 복사본 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="WaxDemo")
+	TObjectPtr<UWaxPlayerDataAsset> PlayerData;
+
 	/** 캡슐 기준 1인칭 카메라 기본 상대 위치 (cm, X: 전후, Y: 좌우, Z: 높이) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|Camera")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="WaxDemo|Camera")
 	FVector CameraBaseOffset = FVector(8.0f, 0.0f, 64.0f);
 
 	/** 1인칭 메시 머리 움직임을 카메라에 반영할 비율 (0: 완전 고정, 1: 100% 추종) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|Camera", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="WaxDemo|Camera")
 	float HeadFollowAlpha = 0.25f;
 
 	/** 카메라 위치 보간 속도 (1/초). 높일수록 즉각 반응, 0이면 보간 없이 즉시 스냅 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|Camera", meta = (ClampMin = "0.0"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="WaxDemo|Camera")
 	float HeadFollowInterpSpeed = 18.0f;
 
 	/** 머리 추종 시 전후(X) 이동 허용 최대치 (cm). 줄이면 펀치·숙임 시 메시에 파묻힘 방지 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|Camera", meta = (ClampMin = "0.0"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="WaxDemo|Camera")
 	float MaxHeadForwardOffset = 8.0f;
 
 	/** 카메라 위치 추종 기준으로 참조할 1인칭 메시 본/소켓 이름 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|Camera")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="WaxDemo|Camera")
 	FName HeadSocketName = FName(TEXT("head"));
 
 	/** 3인칭 프리뷰 카메라 활성화 여부 (개발 테스트용 기본값 켜짐, T 키로 1인칭 전환) */
@@ -144,51 +149,51 @@ public:
 	bool bThirdPersonPreview = true;
 
 	/** 3인칭 프리뷰 시 시선 기준 카메라 오프셋 (cm, X: 뒤로(-), Y: 우측(+), Z: 위(+)) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|Camera")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="WaxDemo|Camera")
 	FVector ThirdPersonPreviewOffset = FVector(-170.0f, 35.0f, 10.0f);
 
 	/** 상반신 시선(Pitch) 추종 활성화 여부 (위·아래 조준 시 팔·상체 함께 기울임) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|UpperBody")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="WaxDemo|UpperBody")
 	bool bEnableUpperBodyPitch = true;
 
 	/** 상반신 시선 Pitch 보간 속도 (1/초). 높일수록 즉각 반응, 0이면 보간 없이 즉시 반영 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|UpperBody", meta = (ClampMin = "0.0", EditCondition = "bEnableUpperBodyPitch"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="WaxDemo|UpperBody")
 	float AimPitchInterpSpeed = 16.0f;
 
 	/** 상반신 Pitch 최대 기울기 각도 (도). 클수록 위·아래 조준 시 상체가 더 많이 기울어짐 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|UpperBody", meta = (ClampMin = "0.0", ClampMax = "85.0", EditCondition = "bEnableUpperBodyPitch"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="WaxDemo|UpperBody")
 	float MaxUpperBodyPitchDeg = 45.0f;
 
 	/** spine_01 본에 분배할 상반신 Pitch 비율 (spine_01~03 합 1.0 권장) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|UpperBody", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "bEnableUpperBodyPitch"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="WaxDemo|UpperBody")
 	float Spine01PitchWeight = 0.25f;
 
 	/** spine_02 본에 분배할 상반신 Pitch 비율 (spine_01~03 합 1.0 권장) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|UpperBody", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "bEnableUpperBodyPitch"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="WaxDemo|UpperBody")
 	float Spine02PitchWeight = 0.35f;
 
 	/** spine_03 본에 분배할 상반신 Pitch 비율 (spine_01~03 합 1.0 권장) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|UpperBody", meta = (ClampMin = "0.0", ClampMax = "1.0", EditCondition = "bEnableUpperBodyPitch"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="WaxDemo|UpperBody")
 	float Spine03PitchWeight = 0.40f;
 
 	/** 이동 중 발밑 왁스 파편을 걷어차는 물리 반응 활성화 여부 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|DebrisKick")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="WaxDemo|DebrisKick")
 	bool bEnableDebrisKick = true;
 
 	/** 발밑 파편을 감지·충격할 구 반경 (cm). 키우면 더 넓은 범위의 파편을 밀어냄 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|DebrisKick", meta = (ClampMin = "10.0"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="WaxDemo|DebrisKick")
 	float DebrisKickRadius = 85.0f;
 
 	/** 캐릭터 수평 이동 속도 대비 파편에 전달할 속도 배율. 높일수록 강하게 날아감 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|DebrisKick", meta = (ClampMin = "0.0"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="WaxDemo|DebrisKick")
 	float DebrisKickStrength = 1.35f;
 
 	/** 파편을 차낼 때 추가로 부여할 상향 속도 (cm/s). 높일수록 높게 튐 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|DebrisKick", meta = (ClampMin = "0.0"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="WaxDemo|DebrisKick")
 	float DebrisKickUpwardBoost = 160.0f;
 
 	/** 파편 걷어차기가 발동되는 최소 수평 이동 속도 (cm/s). 높이면 미세 움직임 무시 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaxDemo|DebrisKick", meta = (ClampMin = "0.0"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="WaxDemo|DebrisKick")
 	float DebrisKickMinMoveSpeed = 25.0f;
 
 	/** 현재 선택되어 스폰될 테스트 몬스터 블루프린트 클래스 */
@@ -208,6 +213,7 @@ private:
 	void OnAttackInputReleased();
 	void TryStartCommandLineCapture();
 	void ApplyCameraViewMode();
+	void ApplyPlayerData();
 	void UpdateFirstPersonCamera(float DeltaTime);
 	void UpdateUpperBodyAimPitch(float DeltaTime);
 	void UpdateDebrisKick();

@@ -201,6 +201,10 @@ void AWaxMonsterBase::InitializeFromData(UWaxMonsterDataAsset* InData)
 	if (MonsterData)
 	{
 		StopDistanceToPlayer = MonsterData->StopDistanceToPlayer;
+		bChasePlayer = MonsterData->bChasePlayer;
+		bEnableHitSlowdown = MonsterData->bEnableHitSlowdown;
+		HitSlowdownDuration = MonsterData->HitSlowdownDuration;
+		HitSlowdownSpeedMultiplier = MonsterData->HitSlowdownSpeedMultiplier;
 		if (UCapsuleComponent* Capsule = GetCapsuleComponent())
 		{
 			Capsule->SetCapsuleSize(FMath::Max(10.0f, MonsterData->CapsuleRadius), FMath::Max(10.0f, MonsterData->CapsuleHalfHeight));

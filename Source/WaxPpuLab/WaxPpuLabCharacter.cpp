@@ -18,6 +18,7 @@
 #include "WaxDestructibleComponent.h"
 #include "WaxMonsterBase.h"
 #include "WaxMonsterDataAsset.h"
+#include "WaxPlayerDataAsset.h"
 #include "WaxPpuLab.h"
 #include "WaxPpuLabGameMode.h"
 
@@ -239,6 +240,7 @@ void AWaxPpuLabCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
+	ApplyPlayerData();
 	bHasCachedHeadRef = false;
 	SmoothedAimPitch = 0.0f;
 
@@ -253,6 +255,31 @@ void AWaxPpuLabCharacter::BeginPlay()
 
 	ApplyCameraViewMode();
 	TryStartCommandLineCapture();
+}
+
+void AWaxPpuLabCharacter::ApplyPlayerData()
+{
+	if (!PlayerData)
+	{
+		return;
+	}
+	CameraBaseOffset = PlayerData->CameraBaseOffset;
+	HeadFollowAlpha = PlayerData->HeadFollowAlpha;
+	HeadFollowInterpSpeed = PlayerData->HeadFollowInterpSpeed;
+	MaxHeadForwardOffset = PlayerData->MaxHeadForwardOffset;
+	HeadSocketName = PlayerData->HeadSocketName;
+	ThirdPersonPreviewOffset = PlayerData->ThirdPersonPreviewOffset;
+	bEnableUpperBodyPitch = PlayerData->bEnableUpperBodyPitch;
+	AimPitchInterpSpeed = PlayerData->AimPitchInterpSpeed;
+	MaxUpperBodyPitchDeg = PlayerData->MaxUpperBodyPitchDeg;
+	Spine01PitchWeight = PlayerData->Spine01PitchWeight;
+	Spine02PitchWeight = PlayerData->Spine02PitchWeight;
+	Spine03PitchWeight = PlayerData->Spine03PitchWeight;
+	bEnableDebrisKick = PlayerData->bEnableDebrisKick;
+	DebrisKickRadius = PlayerData->DebrisKickRadius;
+	DebrisKickStrength = PlayerData->DebrisKickStrength;
+	DebrisKickUpwardBoost = PlayerData->DebrisKickUpwardBoost;
+	DebrisKickMinMoveSpeed = PlayerData->DebrisKickMinMoveSpeed;
 }
 
 void AWaxPpuLabCharacter::SetThirdPersonPreview(bool bEnable)

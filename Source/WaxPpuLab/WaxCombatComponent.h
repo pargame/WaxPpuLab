@@ -52,26 +52,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxCombat|Marker")
 	bool bShowDebugImpact = false;
 
-	/** 마커·디버그 구 색상 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxCombat|Marker")
-	FLinearColor MarkerColor = FLinearColor(1.0f, 0.01f, 0.01f, 1.0f);
-
-	/** 마커 유지 시간 (초) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxCombat|Marker", meta = (ClampMin = "0.05"))
-	float MarkerDurationSec = 0.35f;
-
-	/** 마커 발광 배율 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxCombat|Marker", meta = (ClampMin = "0.0"))
-	float MarkerEmissiveBoost = 8.0f;
-
-	/** 마커 불투명도 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxCombat|Marker", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float MarkerOpacity = 1.0f;
-
-	/** 마커 외곽 페더링 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxCombat|Marker", meta = (ClampMin = "0.1"))
-	float MarkerEdgeSoftness = 0.45f;
-
 	/** 캡처 시 몸 정면 기준 카메라 Yaw 오프셋 (도). 90 근처면 측면 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxCombat|Debug")
 	float CaptureViewYawOffsetDeg = 110.0f;

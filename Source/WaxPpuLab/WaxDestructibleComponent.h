@@ -72,51 +72,67 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "WaxDestructible|Events")
 	FOnWaxCollapsed OnWaxCollapsed;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxDestructible|Audio")
+	/** DataAsset에서 복사한 런타임 값 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxDestructible|Audio")
 	float BreakGrainSpreadMinSec = 0.012f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxDestructible|Audio")
+	/** DataAsset에서 복사한 런타임 값 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxDestructible|Audio")
 	float BreakGrainSpreadMaxSec = 0.085f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxDestructible|Audio")
+	/** DataAsset에서 복사한 런타임 값 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxDestructible|Audio")
 	int32 MaxQueuedGrains = 16;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxDestructible|Audio", meta = (ClampMin = "0.05"))
+	/** DataAsset에서 복사한 런타임 값 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxDestructible|Audio")
 	float CollapseGrainSpreadMaxSec = 0.45f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxDestructible|Audio", meta = (ClampMin = "4"))
+	/** DataAsset에서 복사한 런타임 값 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxDestructible|Audio")
 	int32 CollapseMaxQueuedGrains = 24;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxDestructible|Audio")
+	/** DataAsset에서 복사한 런타임 값 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxDestructible|Audio")
 	float CollisionSoundSpeedThreshold = 65.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxDestructible|Audio")
+	/** DataAsset에서 복사한 런타임 값 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxDestructible|Audio")
 	float MinCollisionAudioInterval = 0.020f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxDestructible|Audio", meta = (ClampMin = "2.0"))
+	/** DataAsset에서 복사한 런타임 값 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxDestructible|Audio")
 	float CollisionSpatialCellSize = 15.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxDestructible|Audio", meta = (ClampMin = "0.01"))
+	/** DataAsset에서 복사한 런타임 값 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxDestructible|Audio")
 	float CollisionSpatialCooldownSec = 0.08f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxDestructible|Audio", meta = (ClampMin = "0.0", ClampMax = "2.0"))
+	/** DataAsset에서 복사한 런타임 값 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxDestructible|Audio")
 	float CollisionCrackleScale = 1.00f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxDestructible|Audio", meta = (ClampMin = "0.0", ClampMax = "2.0"))
+	/** DataAsset에서 복사한 런타임 값 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxDestructible|Audio")
 	float CollisionSnapScale = 1.00f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxDestructible|Audio", meta = (ClampMin = "0.0", ClampMax = "2.0"))
+	/** DataAsset에서 복사한 런타임 값 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxDestructible|Audio")
 	float CollisionBodyScale = 1.00f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxDestructible|Collapse")
+	/** DataAsset에서 복사한 런타임 값 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxDestructible|Collapse")
 	bool bAllowKickAfterCollapse = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxDestructible|Collapse")
+	/** DataAsset에서 복사한 런타임 값 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxDestructible|Collapse")
 	bool bMuteCollisionAudioAfterCollapse = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxDestructible|Collapse", meta = (ClampMin = "0.0"))
+	/** DataAsset에서 복사한 런타임 값 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxDestructible|Collapse")
 	float CollapseCollisionMaxGraceSec = 3.0f;
 
+	/** 화면에 파괴·충돌 카운터 디버그 표시 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxDestructible|Debug")
 	bool bShowDebugCounters = true;
 

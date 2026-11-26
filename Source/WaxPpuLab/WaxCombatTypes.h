@@ -209,4 +209,24 @@ struct FWaxCombatSettings
 	/** 몸-카메라 각도 차 비율(0~1) → 감도 배율. 비어 있으면 선형(1 - t) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rotation")
 	TObjectPtr<UCurveFloat> OffsetFalloffCurve;
+
+	/** 타격 마커·디버그 구 색상 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Marker")
+	FLinearColor MarkerColor = FLinearColor(1.0f, 0.01f, 0.01f, 1.0f);
+
+	/** 마커 유지 시간 (초). 늘리면 오래 남음 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Marker", meta = (ClampMin = "0.05"))
+	float MarkerDurationSec = 0.35f;
+
+	/** 마커 발광 배율. 높일수록 밝음 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Marker", meta = (ClampMin = "0.0"))
+	float MarkerEmissiveBoost = 8.0f;
+
+	/** 마커 불투명도 (0~1) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Marker", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float MarkerOpacity = 1.0f;
+
+	/** 마커 외곽 번짐 정도. 클수록 가장자리가 부드러움 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Marker", meta = (ClampMin = "0.1"))
+	float MarkerEdgeSoftness = 0.45f;
 };

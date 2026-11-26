@@ -173,6 +173,22 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement", meta = (ClampMin = "0.0"))
 	float StopDistanceToPlayer = 150.0f;
 
+	/** 플레이어를 추적 이동할지 여부 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
+	bool bChasePlayer = true;
+
+	/** 맞았을 때 잠깐 느려지는 반응 사용 여부 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HitStop")
+	bool bEnableHitSlowdown = true;
+
+	/** 맞았을 때 느려지는 시간 (초). 늘리면 경직이 길어짐 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HitStop", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float HitSlowdownDuration = 0.15f;
+
+	/** 느려지는 동안 이동 속도 배율 (0~1). 낮출수록 더 많이 멈칫함 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HitStop", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float HitSlowdownSpeedMultiplier = 0.30f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement", meta = (ClampMin = "10.0"))
 	float RollRadius = 92.5f;
 
@@ -283,4 +299,64 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Audio")
 	TArray<FWaxAudioProfile> DevAudioProfiles;
+
+	/** 파괴 시 깨짐 소리 조각(그레인)을 흩뿌리는 최소 지연 (초) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DestructionAudio", meta = (ClampMin = "0.0"))
+	float BreakGrainSpreadMinSec = 0.012f;
+
+	/** 파괴 시 그레인을 흩뿌리는 최대 지연 (초). 늘리면 소리가 길게 퍼짐 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DestructionAudio", meta = (ClampMin = "0.0"))
+	float BreakGrainSpreadMaxSec = 0.085f;
+
+	/** 동시에 대기할 수 있는 최대 그레인 수. 늘리면 소리가 빽빽해짐 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DestructionAudio", meta = (ClampMin = "1"))
+	int32 MaxQueuedGrains = 16;
+
+	/** 전체 붕괴 시 그레인을 흩뿌리는 최대 지연 (초) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DestructionAudio", meta = (ClampMin = "0.05"))
+	float CollapseGrainSpreadMaxSec = 0.45f;
+
+	/** 전체 붕괴 시 최대 그레인 수 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DestructionAudio", meta = (ClampMin = "4"))
+	int32 CollapseMaxQueuedGrains = 24;
+
+	/** 파편 충돌음이 나는 최소 충돌 속도 (cm/s). 높이면 약한 충돌은 조용함 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DestructionAudio", meta = (ClampMin = "0.0"))
+	float CollisionSoundSpeedThreshold = 65.0f;
+
+	/** 충돌음 사이 최소 간격 (초). 늘리면 충돌음 빈도 감소 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DestructionAudio", meta = (ClampMin = "0.0"))
+	float MinCollisionAudioInterval = 0.020f;
+
+	/** 같은 자리 반복 충돌음을 묶는 공간 칸 크기 (cm) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DestructionAudio", meta = (ClampMin = "2.0"))
+	float CollisionSpatialCellSize = 15.0f;
+
+	/** 같은 칸에서 충돌음을 다시 내기까지 대기 (초) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DestructionAudio", meta = (ClampMin = "0.01"))
+	float CollisionSpatialCooldownSec = 0.08f;
+
+	/** 충돌음 잔금(Crackle) 레이어 볼륨 배율 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DestructionAudio", meta = (ClampMin = "0.0", ClampMax = "2.0"))
+	float CollisionCrackleScale = 1.00f;
+
+	/** 충돌음 딱(Snap) 레이어 볼륨 배율 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DestructionAudio", meta = (ClampMin = "0.0", ClampMax = "2.0"))
+	float CollisionSnapScale = 1.00f;
+
+	/** 충돌음 몸통(Body) 레이어 볼륨 배율 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DestructionAudio", meta = (ClampMin = "0.0", ClampMax = "2.0"))
+	float CollisionBodyScale = 1.00f;
+
+	/** 전체 붕괴 후에도 파편 걷어차기 허용 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Collapse")
+	bool bAllowKickAfterCollapse = false;
+
+	/** 전체 붕괴 후 유예 시간이 지나면 충돌음 끄기 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Collapse")
+	bool bMuteCollisionAudioAfterCollapse = true;
+
+	/** 붕괴 후 충돌음을 허용하는 유예 시간 (초) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Collapse", meta = (ClampMin = "0.0"))
+	float CollapseCollisionMaxGraceSec = 3.0f;
 };

@@ -6,7 +6,7 @@
 
 - **몬스터 계층은 1단계**: 모든 몬스터는 `AWaxMonsterBase`(`ACharacter`)의 직계 BP 자식(`BP_WaxBall_Basic`, `BP_WaxButter`)이다. 중간 추상 BP를 추가하지 않는다.
 - **`/Game/` 경로 하드코딩 0건**: `Source/WaxPpuLab/`에 에셋 경로를 쓰지 않는다. 에셋은 `UWaxMonsterDataAsset`(`DA_*`), `UWaxAttackSetDataAsset`, BP/컴포넌트 `UPROPERTY`로 주입한다.
-- **런타임 복사 필드**는 `VisibleInstanceOnly`로 둬서 편집 대상과 구분한다.
+- **튜닝 수치의 원본은 DataAsset**(`DA_WaxPlayer`, `DA_AttackSet_Unarmed`, 몬스터 `DA_*`)이다. 클래스에 두는 같은 이름의 필드는 런타임 복사본이며 `VisibleInstanceOnly`로 둬서 편집 대상과 구분한다. BP에는 참조·입력 액션·디버그 토글만 둔다.
 - **고정 눈알**: `EyeLeftGC`/`EyeRightGC`는 `BodyPivot`에 고정되어 몸체와 함께 움직이며 플레이어를 추적 회전하지 않는다.
 - **파편 수명**: `RemoveOnMaxSleep` 대신 Dataflow `FRemoveOnBreakDataflowNode`(`bAllowRemovalOnBreak = true`, `bAllowRemovalOnSleep = false`) 고정 수명 제거를 쓴다.
 

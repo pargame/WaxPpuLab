@@ -60,7 +60,7 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR �
 | `/Game/WaxPpu/Audio/Foley/` | CC0 충격음 기반 `SW_*` 사운드 웨이브 |
 | `/Game/WaxPpu/Audio/MetaSounds/` | `MS_WaxCrackASMR` 및 프리셋(`WoodPlank`, `HardBlock`, `Heavy`, `BambooClick`, `JadeMarble`, `SoftWaxTap`), `SC_WaxCrack` |
 | `/Game/WaxPpu/Blueprints/` | `BP_WaxBall_Basic`, `BP_WaxButter` |
-| `/Game/WaxPpu/Data/` | `DA_WaxBall_Basic`, `DA_WaxButter` (`UWaxMonsterDataAsset`) |
+| `/Game/WaxPpu/Data/` | `DA_WaxBall_Basic`, `DA_WaxButter` (`UWaxMonsterDataAsset`), `DA_WaxPlayer` (`UWaxPlayerDataAsset`), `DA_AttackSet_Unarmed` (`UWaxAttackSetDataAsset`) |
 | `/Game/WaxPpu/Destruction/Dataflow/` | `DF_WaxOrb`, `DF_WaxButter`, `DF_MonsterEye` |
 | `/Game/WaxPpu/Destruction/GeometryCollections/` | `GC_WaxOrb`, `GC_WaxButter`, `GC_MonsterEye` |
 | `/Game/WaxPpu/Materials/` | `M_WaxButter`, `M_ButterCore`, `M_JellyCore`, `M_MonsterEye`, `MPC_WaxTargeting` |
@@ -73,7 +73,7 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR �
 
 ## 튜닝값 위치 및 수정 가이드
 
-언리얼 에디터에서 별도 C++ 수정 없이 아래 에셋·컴포넌트의 디테일 패널에서 모든 튜닝값을 수정할 수 있습니다.
+체감·튜닝 수치는 **DataAsset이 유일한 원본**입니다. 캐릭터·몬스터·컴포넌트에 같은 이름으로 보이는 필드는 BeginPlay/초기화 때 DA에서 복사된 읽기 전용(`VisibleInstanceOnly`) 런타임 값이므로, 수정은 항상 아래 DA에서 합니다. BP에는 입력 액션·컴포넌트·에셋 참조와 디버그 토글만 둡니다.
 
 > **팁 (일괄 비교·수정)**: 콘텐츠 브라우저에서 `DA_WaxBall_Basic`, `DA_WaxButter`를 함께 선택 → 우클릭 → **Asset Actions → Edit Selection in Property Matrix**로 표 형태 일괄 편집이 가능합니다.
 
@@ -82,32 +82,42 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR �
 | 카테고리 | 주요 파라미터 | 설명 |
 |---|---|---|
 | **Visual** | `ShellCollectionAsset`, `ShellRelativeOffset` | Chaos 껍질 에셋 및 `BodyPivot` 기준 오프셋 |
-| **Movement** | `LocomotionClass`, `MoveSpeed`, `StopDistanceToPlayer`, `RollRadius`, `CapsuleRadius`, `CapsuleHalfHeight` | 로코모션 클래스, 이동 속도, 공격 대기 거리, 구르기 반경, 캡슐 크기 |
+| **Movement** | `LocomotionClass`, `MoveSpeed`, `StopDistanceToPlayer`, `bChasePlayer`, `RollRadius`, `CapsuleRadius`, `CapsuleHalfHeight` | 로코모션 클래스, 이동 속도, 공격 대기 거리, 추적 여부, 구르기 반경, 캡슐 크기 |
+| **HitStop** | `bEnableHitSlowdown`, `HitSlowdownDuration`, `HitSlowdownSpeedMultiplier` | 피격 시 잠깐 느려지는 반응 |
 | **Movement \| Butter** | `ButterLocomotion` (`HalfX/Y/Z`, `MinChargeStartDistance`, `HopDuration/Pause/Height`, `MaxYawPerHopDeg`, `AlignToleranceDeg`, `LayDownDuration`, `StandUpDuration`, `EffectiveGravity`, `DriveAngularAccel`, `InitialStepOmega`, `StepBounceRetention`, `MaxTumbleSteps`, `MaxCorrectionYawPerStepDeg`, `SteerYawRateDeg`, `AbortAngleDeg`) | **왁스버터 전용 튜닝값 전부** (`UWaxButterLocomotionComponent` 런타임 필드는 읽기 전용이며 반드시 `DA_WaxButter.ButterLocomotion`에서 수정) |
 | **Destruction** | `CollapseRemainingRatio`, `CollapseReleaseStrain`, `DebrisLifeSpanAfterCollapse`, `HardnessZones` | 붕괴 임계 잔여율(기본 `0.30`), 붕괴 방출 스트레인, 파편 수명, 부위별 경도/오디오 존 |
 | **Core** | `CoreMeshAsset`, `CoreMaterial`, `CorePhysicalMaterial`, `CoreRelativeScale/Offset`, `CoreLinearDamping`, `CoreAngularDamping`, `CorePopVelocityMin/Max`, `bEnableCoreRevive`, `CoreReviveDelaySec`, `ReviveGrowDuration`, `RevivePreviewMeshAsset/Material/Scale`, `CoreBounceSound` | 코어 외형·탄성·팝 속도·감쇠, 자동 부활 ON/OFF 및 재생 프리뷰 설정 |
 | **Eyes** | `EyeCollectionAsset`, `EyeMaterial`, `EyeDamageThreshold`, `EyeDurability`, `EyeForwardOffset`, `EyeSpacing`, `EyeHeightOffset`, `EyeScale`, `EyeBaseHitRadius`, `EyeDropTimeoutSec`, `EyeShatterSound` | 눈알 Chaos 에셋, 파괴 임계치·타격 내구도, 배치 오프셋·크기, 붕괴 시 낙하 파쇄 타임아웃 |
 | **Audio** | `DefaultAudioProfile`, `DevAudioProfiles` | 기본 파괴·충돌 하이브리드 프로파일 및 개발용 프리셋 목록 (입력 슬롯은 `1..9, 0` 최대 10개 지원, 현재 `1`·`2`번 2개 할당) |
+| **DestructionAudio** | `BreakGrainSpreadMin/MaxSec`, `MaxQueuedGrains`, `CollapseGrainSpreadMaxSec`, `CollapseMaxQueuedGrains`, `CollisionSoundSpeedThreshold`, `MinCollisionAudioInterval`, `CollisionSpatialCellSize/CooldownSec`, `CollisionCrackle/Snap/BodyScale` | 깨짐 그레인 분산·충돌음 빈도·레이어 볼륨 |
+| **Collapse** | `bAllowKickAfterCollapse`, `bMuteCollisionAudioAfterCollapse`, `CollapseCollisionMaxGraceSec` | 붕괴 후 파편 차기·충돌음 처리 |
 
 > **왁스버터(`DA_WaxButter`) 주의사항**
 > - `UWaxButterLocomotionComponent` 사용 시 **`MoveSpeed`와 `CapsuleHalfHeight`는 무시**됩니다.
 > - 버터 구르기 속도·기둥 높이는 반드시 **`ButterLocomotion`** (`EffectiveGravity`, `DriveAngularAccel`, `InitialStepOmega`, `HalfX/Y/Z`)에서 수정하세요.
 > - `StopDistanceToPlayer`는 버터에서도 구르기 종료 및 최소 돌진 기준(`Max(StopDistanceToPlayer, MinChargeStartDistance)`)에 정상 반영됩니다.
 
-### 2. 공통 몬스터 BP — `/Game/WaxPpu/Blueprints/BP_WaxBall_Basic`, `BP_WaxButter`
-- **루트(`AWaxMonsterBase`)**: `MonsterData`, `bChasePlayer`, `bEnableHitSlowdown`, `HitSlowdownDuration`, `HitSlowdownSpeedMultiplier`
-- **`WaxDestructible` 컴포넌트**:
-  - `Audio`: `BreakGrainSpreadMin/MaxSec`, `MaxQueuedGrains`, `CollapseGrainSpreadMaxSec`, `CollisionSoundSpeedThreshold`, `MinCollisionAudioInterval`, `CollisionSpatialCellSize/CooldownSec`, `CollisionCrackle/Snap/BodyScale`
-  - `Collapse`: `bAllowKickAfterCollapse`, `bMuteCollisionAudioAfterCollapse`, `CollapseCollisionMaxGraceSec`
-  - `Debug`: `bShowDebugCounters`
+### 2. 플레이어 — DataAsset (`/Game/WaxPpu/Data/DA_WaxPlayer`)
 
-### 3. 플레이어 공격·펀치 마커 — `AWaxPpuLabCharacter` (`/Game/WaxPpu/Player/BP_WaxPlayer`, `/Game/FirstPerson/Blueprints/BP_FirstPersonCharacter`)
-- `WaxDemo | Impact`: `WaxImpactRadius` (기본 `75.0`), `WaxImpactStrain` (기본 `320,000`)
-- `WaxDemo | Punch`: `PunchMontages`, `PunchPlayRate`, `PunchCooldownSec`, `PunchBoneForwardOffset`
-- `WaxDemo | PunchMarker`: `TargetingMPC`, `bShowPunchImpactMarker` (기본 `true`), `bShowDebugPunchImpact` (기본 `false`), `PunchMarkerColor/DurationSec/EmissiveBoost/Opacity/EdgeSoftness`
-- `WaxDemo | Camera`: `CameraBaseOffset`, `HeadFollowAlpha`, `HeadFollowInterpSpeed`, `MaxHeadForwardOffset`, `HeadSocketName`
-- `WaxDemo | DebrisKick`: `bEnableDebrisKick`, `DebrisKickRadius`, `DebrisKickStrength`, `DebrisKickUpwardBoost`, `DebrisKickMinMoveSpeed`
-- `WaxDemo | Spawn`: `TestMonsterClass`, `TestMonsterClasses`, `WaxSpawnDistance`
+| 카테고리 | 주요 파라미터 |
+|---|---|
+| **Camera** | `CameraBaseOffset`, `HeadFollowAlpha`, `HeadFollowInterpSpeed`, `MaxHeadForwardOffset`, `HeadSocketName`, `ThirdPersonPreviewOffset` |
+| **UpperBody** | `bEnableUpperBodyPitch`, `AimPitchInterpSpeed`, `MaxUpperBodyPitchDeg`, `Spine01/02/03PitchWeight` |
+| **DebrisKick** | `bEnableDebrisKick`, `DebrisKickRadius`, `DebrisKickStrength`, `DebrisKickUpwardBoost`, `DebrisKickMinMoveSpeed` |
+
+### 3. 공격 — DataAsset (`/Game/WaxPpu/Data/DA_AttackSet_Unarmed`)
+
+| 항목 | 주요 파라미터 |
+|---|---|
+| **Basic / Kick** (`FWaxAttackSpec`) | `Montages`, `PlayRate`, `StrainScale`, `RadiusScale`, `ForwardOffset`, 넉백·파편 임펄스, `Windup/Active/RecoveryRotation`(몸 회전 속도·몸-카메라 오프셋·감도) |
+| **JumpAttack** | `AerialStrike`, `Slam`, `HoldThresholdSec`, `SlamMinHeight` 등 |
+| **Settings** | `BaseImpactRadius`, `BaseImpactStrain`, `BufferWindowSec`, `ComboResetSec`, 회전 복귀·감도 블렌드, `OffsetFalloffCurve`, `Marker*`(색·지속·발광·불투명도·번짐) |
+
+공격 타이밍(타격·Active·CancelWindow·RotationProfile)은 펀치 몽타주의 노티파이로 조정합니다. 상세는 [공격 시스템 설계](Docs/Design/CombatAttackDesign.md).
+
+### 4. BP에 남는 항목
+- **플레이어 BP** (`BP_WaxPlayer`, `BP_FirstPersonCharacter`): `PlayerData`, 입력 액션, `bThirdPersonPreview`(개발용 기본 3인칭, T 토글), `TestMonsterClass(es)`, `WaxSpawnDistance`, Combat 컴포넌트의 `AttackSet`·`TargetingMPC`·`bShowImpactMarker`·`bShowDebugImpact`·로그 토글
+- **몬스터 BP** (`BP_WaxBall_Basic`, `BP_WaxButter`): `MonsterData`, `WaxDestructible.bShowDebugCounters`
 
 ---
 

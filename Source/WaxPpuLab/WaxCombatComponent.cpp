@@ -501,11 +501,11 @@ void UWaxCombatComponent::HandleHitNotify(USkeletalMeshComponent* MeshComp, cons
 	if (bShowImpactMarker)
 	{
 		SetMarkerVisible(true, Center, Radius);
-		MarkerExpireTime = Now() + MarkerDurationSec;
+		MarkerExpireTime = Now() + GetSettings().MarkerDurationSec;
 	}
 	if (bShowDebugImpact && GetWorld())
 	{
-		DrawDebugSphere(GetWorld(), Center, Radius, 16, MarkerColor.ToFColor(true), false, MarkerDurationSec, 0, 1.5f);
+		DrawDebugSphere(GetWorld(), Center, Radius, 16, GetSettings().MarkerColor.ToFColor(true), false, GetSettings().MarkerDurationSec, 0, 1.5f);
 	}
 
 	const int32 NumTargets = ApplyImpact(Center, Strain, Radius);
@@ -578,10 +578,10 @@ void UWaxCombatComponent::SetMarkerVisible(bool bVisible, const FVector& Center,
 		{
 			MPCInst->SetVectorParameterValue(TEXT("TargetSphereCenter"), FLinearColor(Center.X, Center.Y, Center.Z, 1.0f));
 			MPCInst->SetScalarParameterValue(TEXT("TargetSphereRadius"), Radius);
-			MPCInst->SetVectorParameterValue(TEXT("MarkerColor"), MarkerColor);
-			MPCInst->SetScalarParameterValue(TEXT("EmissiveBoost"), MarkerEmissiveBoost);
-			MPCInst->SetScalarParameterValue(TEXT("MarkerOpacity"), MarkerOpacity);
-			MPCInst->SetScalarParameterValue(TEXT("EdgeSoftness"), MarkerEdgeSoftness);
+			MPCInst->SetVectorParameterValue(TEXT("MarkerColor"), GetSettings().MarkerColor);
+			MPCInst->SetScalarParameterValue(TEXT("EmissiveBoost"), GetSettings().MarkerEmissiveBoost);
+			MPCInst->SetScalarParameterValue(TEXT("MarkerOpacity"), GetSettings().MarkerOpacity);
+			MPCInst->SetScalarParameterValue(TEXT("EdgeSoftness"), GetSettings().MarkerEdgeSoftness);
 		}
 		else
 		{

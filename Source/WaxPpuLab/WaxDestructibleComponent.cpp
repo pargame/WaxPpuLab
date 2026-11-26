@@ -34,6 +34,21 @@ void UWaxDestructibleComponent::InitializeWithCollection(UGeometryCollectionComp
 	if (DataAsset)
 	{
 		ActiveAudioProfile = DataAsset->DefaultAudioProfile;
+		BreakGrainSpreadMinSec = DataAsset->BreakGrainSpreadMinSec;
+		BreakGrainSpreadMaxSec = DataAsset->BreakGrainSpreadMaxSec;
+		MaxQueuedGrains = DataAsset->MaxQueuedGrains;
+		CollapseGrainSpreadMaxSec = DataAsset->CollapseGrainSpreadMaxSec;
+		CollapseMaxQueuedGrains = DataAsset->CollapseMaxQueuedGrains;
+		CollisionSoundSpeedThreshold = DataAsset->CollisionSoundSpeedThreshold;
+		MinCollisionAudioInterval = DataAsset->MinCollisionAudioInterval;
+		CollisionSpatialCellSize = DataAsset->CollisionSpatialCellSize;
+		CollisionSpatialCooldownSec = DataAsset->CollisionSpatialCooldownSec;
+		CollisionCrackleScale = DataAsset->CollisionCrackleScale;
+		CollisionSnapScale = DataAsset->CollisionSnapScale;
+		CollisionBodyScale = DataAsset->CollisionBodyScale;
+		bAllowKickAfterCollapse = DataAsset->bAllowKickAfterCollapse;
+		bMuteCollisionAudioAfterCollapse = DataAsset->bMuteCollisionAudioAfterCollapse;
+		CollapseCollisionMaxGraceSec = DataAsset->CollapseCollisionMaxGraceSec;
 		ZoneAccumulatedDamage.Init(0.0f, DataAsset->HardnessZones.Num());
 	}
 

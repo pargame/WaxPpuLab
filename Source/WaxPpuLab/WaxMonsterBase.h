@@ -76,19 +76,24 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxMonster")
 	TObjectPtr<UWaxMonsterDataAsset> MonsterData;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxMonster|Movement")
+	/** MonsterData에서 복사한 런타임 값 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxMonster|Movement")
 	bool bChasePlayer = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxMonster|Movement", meta = (ClampMin = "0.0"))
+	/** MonsterData에서 복사한 런타임 값 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxMonster|Movement")
 	float StopDistanceToPlayer = 150.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxMonster|HitStop")
+	/** MonsterData에서 복사한 런타임 값 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxMonster|HitStop")
 	bool bEnableHitSlowdown = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxMonster|HitStop", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	/** MonsterData에서 복사한 런타임 값 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxMonster|HitStop")
 	float HitSlowdownDuration = 0.15f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxMonster|HitStop", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	/** MonsterData에서 복사한 런타임 값 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxMonster|HitStop")
 	float HitSlowdownSpeedMultiplier = 0.30f;
 
 protected:
