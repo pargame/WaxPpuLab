@@ -109,6 +109,7 @@ void UWaxRollingLocomotionComponent::InitializeLocomotion(AWaxMonsterBase* InMon
 
 	RollRadius = (MonsterData && MonsterData->RollRadius > 1.0f) ? MonsterData->RollRadius : 92.5f;
 	CurrentAngularVelocity = FVector::ZeroVector;
+	GroundDrop = 0.0f;
 	LandingBlendRemaining = 0.0f;
 	bWasFalling = false;
 
@@ -203,6 +204,35 @@ void UWaxRollingLocomotionComponent::TickComponent(float DeltaTime, ELevelTick T
 		const FQuat NewWorldQuat = (DeltaQuat * BodyPivot->GetComponentQuat()).GetNormalized();
 		BodyPivot->SetWorldRotation(NewWorldQuat);
 	}
+
+	UpdateGroundContact(DeltaTime, bIsFalling);
+}
+
+void UWaxRollingLocomotionComponent::UpdateGroundContact(float DeltaTime, bool bIsFalling)
+{
+	// 깨진 껍질의 남은 부분(과 코어) 최저점이 바닥에 닿도록 보이는 몸만 내림. 캡슐·이동은 그대로라 깨진 모양대로 구르며 들썩임
+	if (!MonsterData || !MonsterData->bKeepBrokenBodyOnGround)
+	{
+		return;
+	}
+
+	float TargetDrop = GroundDrop;
+	if (!bIsFalling)
+	{
+		TargetDrop = 0.0f;
+		float LowestZ = 0.0f;
+		const UCapsuleComponent* Capsule = OwnerMonster->GetCapsuleComponent();
+		if (Capsule && OwnerMonster->GetAttachedBodyLowestZ(LowestZ))
+		{
+			const float ActorZ = OwnerMonster->GetActorLocation().Z;
+			const float FloorZ = ActorZ - Capsule->GetScaledCapsuleHalfHeight();
+			const float LowestRelToPivot = LowestZ - BodyPivot->GetComponentLocation().Z;
+			TargetDrop = FMath::Clamp(FloorZ - LowestRelToPivot - ActorZ, -MonsterData->GroundContactMaxDrop, 0.0f);
+		}
+	}
+
+	GroundDrop = MonsterData->GroundContactInterpSpeed > 0.0f ? FMath::FInterpTo(GroundDrop, TargetDrop, DeltaTime, MonsterData->GroundContactInterpSpeed) : TargetDrop;
+	BodyPivot->SetRelativeLocation(FVector(0.0f, 0.0f, GroundDrop));
 }
 
 void UWaxButterLocomotionComponent::InitializeLocomotion(AWaxMonsterBase* InMonster, USceneComponent* InBodyPivot, UWaxMonsterDataAsset* InData)

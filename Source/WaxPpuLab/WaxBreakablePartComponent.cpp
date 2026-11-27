@@ -610,3 +610,67 @@ void UWaxBreakablePartComponent::ExtendLooseRule()
 	const float MaxShrink = FMath::Max(S.FragmentShrinkSecRange.X, S.FragmentShrinkSecRange.Y);
 	LooseRuleUntil = FMath::Max(LooseRuleUntil, GetNow() + S.ClusterCrumbleDelaySec + S.DetachShatterDelaySec + MaxLife + MaxShrink + 1.0f);
 }
+
+bool UWaxBreakablePartComponent::ComputeAttachedLowestZ(float& OutLowestZ)
+{
+	if (!Collection || !Collection->IsVisible() || bDetached || bReleased || !Collection->GetRestCollection())
+	{
+		return false;
+	}
+
+	const TArray<FTransform3f>& Current = Collection->GetComponentSpaceTransforms3f();
+	if (!bBroken)
+	{
+		// 안 깨진 동안 기준 자세를 갱신하고, 최저점은 계산하지 않음 (온전한 구는 캡슐 바닥에 닿아 있음)
+		RestComponentSpace = Current;
+		return false;
+	}
+	if (RestComponentSpace.Num() != Current.Num())
+	{
+		return false;
+	}
+
+	const TSharedPtr<const FGeometryCollection, ESPMode::ThreadSafe> GeomCol = Collection->GetRestCollection()->GetGeometryCollection();
+	if (!GeomCol.IsValid())
+	{
+		return false;
+	}
+	const TManagedArray<int32>& TransformToGeometry = GeomCol->TransformToGeometryIndex;
+	const TManagedArray<FBox>& LocalBoxes = GeomCol->BoundingBox;
+
+	const FTransform ComponentToWorld = Collection->GetComponentTransform();
+	float LowestZ = TNumericLimits<float>::Max();
+	bool bAny = false;
+	for (const int32 Leaf : LeafNodeIndices)
+	{
+		if (!Current.IsValidIndex(Leaf) || !TransformToGeometry.IsValidIndex(Leaf))
+		{
+			continue;
+		}
+		// 몸에 붙은 조각은 깨지기 전 자세 그대로, 떨어진 조각은 위치가 달라지고 축소 중이면 스케일이 줄어듦
+		const FTransform3f& Now = Current[Leaf];
+		if (!Now.GetTranslation().Equals(RestComponentSpace[Leaf].GetTranslation(), 1.0f) || Now.GetScale3D().X < 0.99f)
+		{
+			continue;
+		}
+		const int32 GeometryIndex = TransformToGeometry[Leaf];
+		if (!LocalBoxes.IsValidIndex(GeometryIndex))
+		{
+			continue;
+		}
+		const FBox& Box = LocalBoxes[GeometryIndex];
+		const FTransform LeafToWorld = FTransform(Now) * ComponentToWorld;
+		for (int32 Corner = 0; Corner < 8; ++Corner)
+		{
+			const FVector Local((Corner & 1) ? Box.Max.X : Box.Min.X, (Corner & 2) ? Box.Max.Y : Box.Min.Y, (Corner & 4) ? Box.Max.Z : Box.Min.Z);
+			LowestZ = FMath::Min(LowestZ, static_cast<float>(LeafToWorld.TransformPosition(Local).Z));
+		}
+		bAny = true;
+	}
+
+	if (bAny)
+	{
+		OutLowestZ = LowestZ;
+	}
+	return bAny;
+}

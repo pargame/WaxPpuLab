@@ -317,6 +317,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement", meta = (ClampMin = "10.0"))
 	float RollRadius = 92.5f;
 
+	/** 껍질이 깨져 아랫부분이 비면 남은 몸의 가장 낮은 점이 바닥에 닿도록 보이는 몸을 내림 (구르는 볼 전용). 끄면 깨져도 원래 높이 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement|GroundContact")
+	bool bKeepBrokenBodyOnGround = true;
+
+	/** 바닥 맞춤 높이를 따라가는 빠르기. 높이면 깨진 모양대로 즉각 들썩이고, 낮추면 부드럽게 출렁임 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement|GroundContact", meta = (ClampMin = "0.0"))
+	float GroundContactInterpSpeed = 14.0f;
+
+	/** 몸을 바닥 쪽으로 최대 얼마나 내릴지 (cm). 너무 많이 파묻히거나 튀면 줄임 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement|GroundContact", meta = (ClampMin = "0.0"))
+	float GroundContactMaxDrop = 70.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement", meta = (ClampMin = "10.0"))
 	float CapsuleRadius = 92.5f;
 

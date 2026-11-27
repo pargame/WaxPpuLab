@@ -70,6 +70,9 @@ public:
 private:
 	FVector PrevActorLocation = FVector::ZeroVector;
 	FVector CurrentAngularVelocity = FVector::ZeroVector;
+	float GroundDrop = 0.0f;
+
+	void UpdateGroundContact(float DeltaTime, bool bIsFalling);
 	float RollRadius = 92.5f;
 	float LandingBlendRemaining = 0.0f;
 	bool bHasPrevLocation = false;

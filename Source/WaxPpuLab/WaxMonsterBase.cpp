@@ -3,6 +3,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -532,4 +533,23 @@ void AWaxMonsterBase::OutsideWorldBounds()
 {
 	UE_LOG(LogWaxMonster, Warning, TEXT("WaxMonster OutsideWorldBounds actor=%s loc=%s vel=%.0f"), *GetName(), *GetActorLocation().ToString(), GetVelocity().Size());
 	Super::OutsideWorldBounds();
+}
+
+bool AWaxMonsterBase::GetAttachedBodyLowestZ(float& OutLowestZ) const
+{
+	float ShellLowest = 0.0f;
+	if (!WaxDestructible || !WaxDestructible->ComputeAttachedLowestZ(ShellLowest))
+	{
+		return false;
+	}
+
+	float Lowest = ShellLowest;
+	if (CoreMesh && CoreMesh->IsVisible() && CoreMesh->GetStaticMesh())
+	{
+		// 코어는 둥글어서 회전과 무관하게 중심 - 반지름이 최저점
+		const float CoreRadius = CoreMesh->GetStaticMesh()->GetBounds().BoxExtent.Z * CoreMesh->GetComponentScale().Z;
+		Lowest = FMath::Min(Lowest, static_cast<float>(CoreMesh->GetComponentLocation().Z) - CoreRadius);
+	}
+	OutLowestZ = Lowest;
+	return true;
 }

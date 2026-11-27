@@ -47,6 +47,9 @@ public:
 	/** 몬스터 튜닝 값의 단일 출처. 데이터 에셋이 없으면 클래스 기본값 */
 	const UWaxMonsterDataAsset& GetMonsterData() const;
 
+	/** 깨진 껍질에서 몸에 붙은 부분과 코어 중 가장 낮은 월드 Z. 껍질이 온전하면 false (구르는 몸을 바닥에 붙일 때 사용) */
+	bool GetAttachedBodyLowestZ(float& OutLowestZ) const;
+
 	UFUNCTION(BlueprintPure, Category = "WaxMonster")
 	EWaxMonsterState GetMonsterState() const { return MonsterState; }
 
