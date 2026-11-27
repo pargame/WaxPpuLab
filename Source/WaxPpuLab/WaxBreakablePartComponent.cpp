@@ -12,6 +12,7 @@
 #include "GeometryCollectionProxyData.h"
 #include "Kismet/GameplayStatics.h"
 #include "PBDRigidsSolver.h"
+#include "PhysicsProxy/FieldSystemProxyHelper.h"
 #include "PhysicsProxy/GeometryCollectionPhysicsProxy.h"
 #include "Sound/SoundBase.h"
 
@@ -307,15 +308,17 @@ void UWaxBreakablePartComponent::EnforceAnchorRule()
 			if (!Body && LargestAny && AnyLeafCount > 1)
 			{
 				Body = LargestAny;
-				Evolution->SetParticleObjectState(Body, Chaos::EObjectStateType::Kinematic);
+				// 엔진 필드와 같은 경로로 전환 (GC 파티클은 SetParticleObjectState를 쓰면 활성 배열이 어긋나 속도가 폭주함). Kinematic 전환 시 속도도 0으로
+				Chaos::ReportDynamicStateResult(Solver, Chaos::EObjectStateType::Kinematic, Body, false, Chaos::FVec3(0), false, Chaos::FVec3(0));
 			}
 		}
 
 		for (Chaos::FPBDRigidClusteredParticleHandle* Top : ActiveTops)
 		{
-			if (Top != Body && Top->ObjectState() == Chaos::EObjectStateType::Kinematic)
+			// 엔진 필드와 같은 경로. 질량이 0인 파티클은 Dynamic으로 바꾸지 않음
+			if (Top != Body && Top->ObjectState() == Chaos::EObjectStateType::Kinematic
+				&& Chaos::ReportDynamicStateResult(Solver, Chaos::EObjectStateType::Dynamic, Top, false, Chaos::FVec3(0), false, Chaos::FVec3(0)))
 			{
-				Evolution->SetParticleObjectState(Top, Chaos::EObjectStateType::Dynamic);
 				Evolution->SetParticleKinematicTarget(Top, Chaos::FKinematicTarget());
 			}
 		}
