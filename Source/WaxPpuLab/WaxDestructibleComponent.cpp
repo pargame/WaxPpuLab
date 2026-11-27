@@ -6,6 +6,8 @@
 #include "GeometryCollection/GeometryCollectionComponent.h"
 #include "Sound/SoundBase.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogWaxDestruction, Log, All);
+
 UWaxDestructibleComponent::UWaxDestructibleComponent()
 {
 }
@@ -154,6 +156,12 @@ void UWaxDestructibleComponent::TriggerRemainingCollapse()
 
 	bHasCollapsed = true;
 	CollapseTimestamp = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+
+	const float BrokenPct = (1.0f - GetRemainingRatio()) * 100.0f;
+	const float ThresholdBrokenPct = (1.0f - Data().CollapseRemainingRatio) * 100.0f;
+	UE_LOG(LogWaxDestruction, Log, TEXT("WaxDestruction Collapse actor=%s broken=%.0f%% (%d/%d pieces) threshold=%.0f%% broken (remaining<=%.0f%%) t=%.2f"),
+		GetOwner() ? *GetOwner()->GetName() : TEXT("None"), BrokenPct, BrokenLeafIndices.Num(), LeafNodeIndices.Num(),
+		ThresholdBrokenPct, Data().CollapseRemainingRatio * 100.0f, CollapseTimestamp);
 	Collection->SetCustomPrimitiveDataFloat(0, 1.0f);
 	ReleaseAll(Data().CollapseReleaseStrain);
 	OnWaxCollapsed.Broadcast(GetOwner());

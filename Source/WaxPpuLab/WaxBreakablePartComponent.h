@@ -21,7 +21,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnWaxPartBroken, UWaxBreakablePart
 
 /**
  * GeometryCollection 부위 하나의 파괴 물리를 담당하는 공통 계층.
- * 껍질·눈 등 모든 부위가 같은 규칙(타격 → 깨짐 → 몸 부착 유지 또는 전체 탈락 → 수명 후 제거. 깨진 조각 자체의 제거 타이밍은 GC 에셋 Dataflow의 RemoveOnBreak가 담당)을 공유한다.
+ * 껍질·눈 등 모든 부위가 같은 규칙을 공유한다.
+ * 타격은 Strain만 가하고, Kinematic(몸에 붙음)은 남은 본체 하나에만 허용하며 나머지 조각은 모두 Dynamic으로 떨어뜨린다.
+ * 떨어진 조각은 엔진 RemoveOnBreak(축소 제거)로 조각마다 수명 후 줄어들어 사라지며, 그 시간 값은 부위 설정(DA)이 GC 동적 속성에 덮어쓴다.
  */
 UCLASS(ClassGroup = (WaxDemo), meta = (BlueprintSpawnableComponent))
 class WAXPPULAB_API UWaxBreakablePartComponent : public UActorComponent, public IWaxHittable
@@ -47,7 +49,7 @@ public:
 	/** 반경 안 모든 부위의 깨진 조각에 속도를 줌. 영향받은 부위 수 반환 */
 	static int32 KickFragmentsInRadius(UWorld* World, const FVector& Origin, const FVector& Velocity, float Radius, const AActor* IgnoreActor);
 
-	/** 부위 전체를 몸에서 떼어 냄 (DetachWholeOnBreak 탈락, 몸 붕괴 시 사용) */
+	/** 부위 전체를 몸에서 떼어 냄 (DetachWholeOnBreak 탈락, 몸 붕괴 시 사용). 이후 조각은 일반 수명 규칙으로 사라짐 */
 	void DetachWhole(const FVector& WorldPopVelocity);
 
 	/** 몸 앞 방향 기준 탈락 속도 계산 (설정의 DetachPopVelocity 사용) */
@@ -104,8 +106,10 @@ private:
 
 	void BuildLeafCache();
 	void ApplyStrain(const FVector& WorldImpactPoint, float Strain, float Radius);
-	void RequestReanchor();
-	void ReanchorBody();
+	bool NeedsAnchorRule() const;
+	void ExtendLooseRule();
+	void EnforceAnchorRule();
+	void SyncFragmentRemovalTimers();
 	void PlayPartSound(USoundBase* Sound, const FVector& Location, float Volume, const FVector2D& PitchRange) const;
 
 	UPROPERTY(Transient)
@@ -131,9 +135,9 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UCullingField> LocalVelocity;
 
-	float ReanchorUntil = -1.0f;
-	uint64 ReanchorEarliestFrame = 0;
-	float DetachedExpireTime = -1.0f;
+	/** 떼어 냄·전체 붕괴 이후 Kinematic 정리 규칙을 계속 적용할 마감 시각 (모든 조각 수명이 끝날 때까지) */
+	float LooseRuleUntil = -1.0f;
+	int32 RemovalSeed = 0;
 	float LateralSign = 0.0f;
 	int32 HitCount = 0;
 	bool bBroken = false;

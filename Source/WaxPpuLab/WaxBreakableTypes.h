@@ -49,17 +49,21 @@ struct FWaxBreakablePartSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hit", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float StrainEdgeRatio = 0.85f;
 
-	/** 타격·파괴 후 남은 몸통 덩어리를 몸에 다시 고정하는 검사를 반복하는 시간 (초) */
+	/** 떨어져 나간 조각이 그대로 유지되는 시간 범위 (초, 깨진 순간부터). 지나면 축소 시작. 조각마다 범위 안에서 무작위 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lifecycle")
+	FVector2D FragmentLifeSecRange = FVector2D(1.5f, 2.0f);
+
+	/** 조각이 줄어들어 사라지는 데 걸리는 시간 범위 (초). 키우면 천천히 줄어듦. 0이면 즉시 사라짐 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lifecycle")
+	FVector2D FragmentShrinkSecRange = FVector2D(0.35f, 0.45f);
+
+	/** 몸에서 떨어진 덩어리(여러 조각이 붙은 채)가 낱개 조각으로 흩어지기까지 시간 (초). 0이면 바로 흩어져 조각마다 따로 수명이 흐름 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lifecycle", meta = (ClampMin = "0.0"))
-	float ReanchorWindowSec = 0.15f;
+	float ClusterCrumbleDelaySec = 0.0f;
 
 	/** 부위 전체가 탈락할 때 튀어나가는 속도 (cm/s). X=몸 앞, Y=몸 바깥 옆, Z=위 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lifecycle")
 	FVector DetachPopVelocity = FVector(110.0f, 75.0f, 95.0f);
-
-	/** 탈락한 부위가 사라지기까지 시간 (초). 0이면 사라지지 않음 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lifecycle", meta = (ClampMin = "0.0"))
-	float DetachedLifeSpanSec = 4.0f;
 
 	/** 몸 붕괴로 탈락한 부위가 공중에서 산산조각 나기까지 시간 (초) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lifecycle", meta = (ClampMin = "0.0"))

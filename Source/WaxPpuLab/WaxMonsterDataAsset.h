@@ -330,7 +330,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Destruction")
 	FWaxBreakablePartSettings ShellPart;
 
-	/** 넉백을 적용하기 전 대기 프레임 수. 깨진 껍질이 몸에 다시 고정된 뒤 밀리도록 하는 값이라 1~3 권장, 0이면 즉시 */
+	/** 넉백을 적용하기 전 대기 프레임 수. 막 깨진 조각이 몸에서 풀려난 뒤 밀리도록 하는 값이라 1~3 권장, 0이면 즉시 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Destruction", meta = (ClampMin = "0", ClampMax = "10"))
 	int32 KnockbackDelayFrames = 2;
 
@@ -412,7 +412,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Eyes", meta = (ClampMin = "0.05"))
 	float EyeScale = 0.30f;
 
-	/** 눈 부위 파괴 규칙 (기본: 처음 깨지면 통째로 탈락 후 수명 뒤 사라짐) */
+	/** 눈 부위 파괴 규칙 (기본: 처음 깨지면 통째로 탈락, 이후 조각마다 수명 뒤 줄어들어 사라짐) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Eyes")
 	FWaxBreakablePartSettings EyePart;
 

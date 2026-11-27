@@ -282,7 +282,7 @@ bool AWaxMonsterBase::ReceiveHit_Implementation(const FWaxHitPayload& Payload)
 
 	StartHitSlowdown();
 
-	// 깨진 껍질이 다음 프레임에 몸에 다시 고정된 뒤 밀리도록 넉백을 몇 프레임 늦춤
+	// 막 깨져 나온 조각이 Dynamic으로 바뀌기 전(1~2프레임)에 몸이 밀리면 조각이 몸을 따라 끌려가므로 넉백을 몇 프레임 늦춤
 	if (Payload.HasKnockback() && MonsterState == EWaxMonsterState::Active)
 	{
 		const FVector Velocity = Payload.ComputeKnockbackVelocity(GetActorLocation());

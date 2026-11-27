@@ -8,7 +8,8 @@
 - **`/Game/` 경로 하드코딩 0건**: `Source/WaxPpuLab/`에 에셋 경로를 쓰지 않는다. 에셋은 `UWaxMonsterDataAsset`(`DA_*`), `UWaxAttackSetDataAsset`, BP/컴포넌트 `UPROPERTY`로 주입한다.
 - **튜닝 수치의 원본은 DataAsset**(`DA_WaxPlayer`, `DA_AttackSet_Unarmed`, 몬스터 `DA_*`)이다. 클래스에 두는 같은 이름의 필드는 런타임 복사본이며 `VisibleInstanceOnly`로 둬서 편집 대상과 구분한다. BP에는 참조·입력 액션·디버그 토글만 둔다.
 - **고정 눈알**: `EyeLeftGC`/`EyeRightGC`는 `BodyPivot`에 고정되어 몸체와 함께 움직이며 플레이어를 추적 회전하지 않는다.
-- **파편 수명**: `RemoveOnMaxSleep` 대신 Dataflow `FRemoveOnBreakDataflowNode`(`bAllowRemovalOnBreak = true`, `bAllowRemovalOnSleep = false`) 고정 수명 제거를 쓴다.
+- **파편 수명**: `RemoveOnMaxSleep` 대신 엔진 `RemoveOnBreak` 축소 제거(`bAllowRemovalOnBreak = true`, `bAllowRemovalOnSleep = false`, GC 에셋 `bScaleOnRemoval = true`)를 쓰고, 시간 값의 원본은 몬스터 DA 부위 설정(`ShellPart`/`EyePart`)이다. 엔진 소스는 수정하지 않는다.
+- **Kinematic은 본체 하나만**: 파괴 부위에서 몸에 붙어 따라가는 Kinematic 상태는 남은 본체 덩어리에만 허용하고, 타격 시 Dynamic 전환 필드를 쓰지 않는다(본체가 몸에서 떨어져 나가고 수명 타이머가 흐름).
 
 ## 저장소·협업
 

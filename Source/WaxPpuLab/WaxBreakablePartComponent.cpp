@@ -5,12 +5,30 @@
 #include "Engine/World.h"
 #include "Field/FieldSystemObjects.h"
 #include "GeometryCollection/GeometryCollection.h"
+#include "GeometryCollection/Facades/CollectionRemoveOnBreakFacade.h"
 #include "GeometryCollection/GeometryCollectionComponent.h"
+#include "GeometryCollection/GeometryCollectionEngineRemoval.h"
 #include "GeometryCollection/GeometryCollectionObject.h"
+#include "GeometryCollectionProxyData.h"
 #include "Kismet/GameplayStatics.h"
 #include "PBDRigidsSolver.h"
 #include "PhysicsProxy/GeometryCollectionPhysicsProxy.h"
 #include "Sound/SoundBase.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogWaxBreakable, Log, All);
+
+namespace
+{
+	const FName PostBreakDurationName(TEXT("PostBreakDuration"));
+	const FName BreakRemovalDurationName(TEXT("BreakRemovalDuration"));
+
+	float RandInRange(FRandomStream& Rand, const FVector2D& Range)
+	{
+		const float Lo = FMath::Max(0.0f, static_cast<float>(FMath::Min(Range.X, Range.Y)));
+		const float Hi = FMath::Max(Lo, static_cast<float>(FMath::Max(Range.X, Range.Y)));
+		return Rand.FRandRange(Lo, Hi);
+	}
+}
 
 UWaxBreakablePartComponent::UWaxBreakablePartComponent()
 {
@@ -42,8 +60,8 @@ void UWaxBreakablePartComponent::InitializePart(UGeometryCollectionComponent* In
 	LateralSign = InLateralSign;
 
 	BrokenLeafIndices.Reset();
-	ReanchorUntil = -1.0f;
-	DetachedExpireTime = -1.0f;
+	LooseRuleUntil = -1.0f;
+	RemovalSeed = static_cast<int32>(GetUniqueID());
 	HitCount = 0;
 	bBroken = false;
 	bDetached = false;
@@ -77,10 +95,19 @@ void UWaxBreakablePartComponent::InitializePart(UGeometryCollectionComponent* In
 	Collection->OnChaosBreakEvent.RemoveDynamic(this, &UWaxBreakablePartComponent::HandleChaosBreakEvent);
 	Collection->OnChaosBreakEvent.AddDynamic(this, &UWaxBreakablePartComponent::HandleChaosBreakEvent);
 
+	// GC 틱(엔진 RemoveOnBreak 타이머 갱신) 뒤에 실행돼야 덮어쓴 수명 값이 유지됨
+	AddTickPrerequisiteComponent(Collection);
+
+	if (Collection->GetRestCollection() && !Collection->GetRestCollection()->bScaleOnRemoval)
+	{
+		UE_LOG(LogWaxBreakable, Warning, TEXT("%s: GC 에셋 %s의 bScaleOnRemoval이 꺼져 있어 조각이 줄지 않고 바로 사라집니다"),
+			*GetPathName(), *Collection->GetRestCollection()->GetName());
+	}
+
 	BuildLeafCache();
 	EnsureFieldNodes();
 
-	// 컴포넌트 ObjectType은 Dynamic으로 두고(깨진 조각이 떨어지도록) 활성 루트만 Kinematic으로 고정
+	// 컴포넌트 ObjectType은 Dynamic으로 두고 활성 루트(와 직계 자식)만 Kinematic으로 고정. 이 Kinematic 덩어리가 몸 본체이며 컴포넌트 이동을 따라감
 	StateValue->SetUniformInteger(static_cast<int32>(EObjectStateTypeEnum::Chaos_Object_Kinematic));
 	Collection->ApplyPhysicsField(true, EGeometryCollectionPhysicsTypeEnum::Chaos_DynamicState, nullptr, StateValue);
 
@@ -159,9 +186,12 @@ bool UWaxBreakablePartComponent::ApplyImpact(const FVector& WorldImpactPoint, fl
 void UWaxBreakablePartComponent::ApplyStrain(const FVector& WorldImpactPoint, float Strain, float Radius)
 {
 	EnsureFieldNodes();
+
+	// 타격은 Strain만 가함. 반경 안을 Dynamic으로 바꾸면 반경이 큰 공격(발차기)에서 본체까지 Dynamic이 되어 몸에서 떨어져 나가고 수명 타이머가 흐름.
+	// 떨어진 조각의 Dynamic 전환은 EnforceAnchorRule이 맡음
 	StrainFalloff->SetRadialFalloff(Strain, GetPartSettings().StrainEdgeRatio, 1.0f, 0.0f, Radius, WorldImpactPoint, EFieldFalloffType::Field_Falloff_Linear);
 	Collection->ApplyPhysicsField(true, EGeometryCollectionPhysicsTypeEnum::Chaos_ExternalClusterStrain, nullptr, StrainFalloff);
-	RequestReanchor();
+	RefreshTickEnabled();
 }
 
 void UWaxBreakablePartComponent::HandleChaosBreakEvent(const FChaosBreakEvent& BreakEvent)
@@ -184,31 +214,27 @@ void UWaxBreakablePartComponent::HandleChaosBreakEvent(const FChaosBreakEvent& B
 		}
 	}
 
-	RequestReanchor();
 	OnFragmentBroken(BreakEvent);
 	RefreshTickEnabled();
 }
 
-void UWaxBreakablePartComponent::RequestReanchor()
+bool UWaxBreakablePartComponent::NeedsAnchorRule() const
 {
-	const FWaxBreakablePartSettings& S = GetPartSettings();
-	if (S.BreakMode != EWaxBreakMode::ChipAndRetainBody || bReleased || !GetWorld())
+	if (!Collection)
 	{
-		return;
+		return false;
 	}
-
-	// 같은 물리 스텝에서는 아직 깨지기 전이므로 다음 프레임부터 검사. 이미 대기 중이면 시작 프레임을 미루지 않음
-	if (ReanchorUntil < GetNow())
+	if (bDetached || bReleased)
 	{
-		ReanchorEarliestFrame = GFrameCounter + 1;
+		return LooseRuleUntil >= GetNow();
 	}
-	ReanchorUntil = FMath::Max(ReanchorUntil, GetNow() + S.ReanchorWindowSec);
-	RefreshTickEnabled();
+	return HasBrokenPieces() || bBroken;
 }
 
-void UWaxBreakablePartComponent::ReanchorBody()
+void UWaxBreakablePartComponent::EnforceAnchorRule()
 {
-	// 깨지면서 새로 생긴 남은 클러스터는 Dynamic이 되어 몸을 안 따라가므로, 가장 큰 활성 클러스터(몸통)만 Kinematic으로 되돌리고 나머지 조각·섬은 그대로 떨어지게 둠
+	// 규칙: Kinematic(몸에 붙어 따라감)은 남은 본체 하나만. 나머지 활성 조각·덩어리는 모두 Dynamic으로 떨어뜨려야 엔진 RemoveOnBreak 수명이 흐름.
+	// 떼어 냄·전체 붕괴 이후에는 본체도 없음
 	FGeometryCollectionPhysicsProxy* Proxy = Collection ? Collection->GetPhysicsProxy() : nullptr;
 	Chaos::FPhysicsSolver* Solver = Proxy ? Proxy->GetSolver<Chaos::FPhysicsSolver>() : nullptr;
 	if (!Solver)
@@ -216,7 +242,8 @@ void UWaxBreakablePartComponent::ReanchorBody()
 		return;
 	}
 
-	Solver->EnqueueCommandImmediate([Proxy, Solver]()
+	const bool bKeepBody = GetPartSettings().BreakMode == EWaxBreakMode::ChipAndRetainBody && !bDetached && !bReleased;
+	Solver->EnqueueCommandImmediate([Proxy, Solver, bKeepBody]()
 	{
 		Chaos::FPBDRigidsEvolution* Evolution = Solver->GetEvolution();
 		if (!Evolution)
@@ -240,63 +267,123 @@ void UWaxBreakablePartComponent::ReanchorBody()
 			}
 			return Count;
 		};
-		TArray<Chaos::FPBDRigidClusteredParticleHandle*> ActiveClusters;
-		Chaos::FPBDRigidClusteredParticleHandle* Body = nullptr;
-		int32 BodyLeafCount = 0;
+
+		// 깨질 때 생긴 내부 클러스터는 프록시 파티클 목록에 없으므로 각 파티클의 최상위 부모로 활성 덩어리를 모음 (낱개 조각 포함)
+		TSet<Chaos::FPBDRigidClusteredParticleHandle*> ActiveTops;
 		for (Chaos::FPBDRigidClusteredParticleHandle* Handle : Proxy->GetUnorderedParticles_Internal())
 		{
-			if (!Handle || Handle->Disabled())
+			Chaos::FPBDRigidClusteredParticleHandle* Top = Handle;
+			while (Top && Top->Parent())
 			{
-				continue;
+				Top = Top->Parent();
 			}
-			const TArray<Chaos::FPBDRigidParticleHandle*>* Children = ChildrenMap.Find(Handle);
-			if (!Children || Children->Num() == 0)
+			if (Top && !Top->Disabled())
 			{
-				continue;
-			}
-			ActiveClusters.Add(Handle);
-			const int32 LeafCount = CountLeaves(Handle);
-			if (LeafCount > BodyLeafCount)
-			{
-				Body = Handle;
-				BodyLeafCount = LeafCount;
+				ActiveTops.Add(Top);
 			}
 		}
 
-		for (Chaos::FPBDRigidClusteredParticleHandle* Cluster : ActiveClusters)
+		// 본체 = 이미 Kinematic인 덩어리 중 조각 수가 가장 많은 것. Kinematic 덩어리가 하나도 없으면(깨질 때 남은 덩어리가 Dynamic으로 생성된 경우) 가장 큰 덩어리를 다시 고정
+		Chaos::FPBDRigidClusteredParticleHandle* Body = nullptr;
+		if (bKeepBody)
 		{
-			if (Cluster == Body)
+			int32 KinematicLeafCount = 0;
+			int32 AnyLeafCount = 0;
+			Chaos::FPBDRigidClusteredParticleHandle* LargestAny = nullptr;
+			for (Chaos::FPBDRigidClusteredParticleHandle* Top : ActiveTops)
 			{
-				if (Cluster->ObjectState() != Chaos::EObjectStateType::Kinematic)
+				const int32 LeafCount = CountLeaves(Top);
+				if (LeafCount > AnyLeafCount)
 				{
-					Evolution->SetParticleObjectState(Cluster, Chaos::EObjectStateType::Kinematic);
+					LargestAny = Top;
+					AnyLeafCount = LeafCount;
 				}
-				continue;
+				if (Top->ObjectState() == Chaos::EObjectStateType::Kinematic && LeafCount > KinematicLeafCount)
+				{
+					Body = Top;
+					KinematicLeafCount = LeafCount;
+				}
 			}
-			if (Cluster->ObjectState() == Chaos::EObjectStateType::Kinematic)
+			if (!Body && LargestAny && AnyLeafCount > 1)
 			{
-				Evolution->SetParticleObjectState(Cluster, Chaos::EObjectStateType::Dynamic);
-				Evolution->SetParticleKinematicTarget(Cluster, Chaos::FKinematicTarget());
+				Body = LargestAny;
+				Evolution->SetParticleObjectState(Body, Chaos::EObjectStateType::Kinematic);
+			}
+		}
+
+		for (Chaos::FPBDRigidClusteredParticleHandle* Top : ActiveTops)
+		{
+			if (Top != Body && Top->ObjectState() == Chaos::EObjectStateType::Kinematic)
+			{
+				Evolution->SetParticleObjectState(Top, Chaos::EObjectStateType::Dynamic);
+				Evolution->SetParticleKinematicTarget(Top, Chaos::FKinematicTarget());
 			}
 		}
 	});
+}
+
+void UWaxBreakablePartComponent::SyncFragmentRemovalTimers()
+{
+	// 엔진 RemoveOnBreak(조각마다 수명 → 축소 → 제거)는 그대로 쓰고, 시간 값만 DA 부위 설정으로 덮어씀.
+	// 엔진은 첫 깨짐 뒤 GC 틱에서 에셋 Dataflow 값으로 동적 속성을 채우므로, 같은 시드로 매번 같은 값을 다시 씀(멱등)
+	FGeometryDynamicCollection* Dyn = Collection ? Collection->GetDynamicCollection() : nullptr;
+	const UGeometryCollection* Rest = Collection ? Collection->GetRestCollection() : nullptr;
+	if (!Dyn || !Rest || !Rest->GetGeometryCollection().IsValid())
+	{
+		return;
+	}
+
+	FGeometryCollectionRemoveOnBreakDynamicFacade RemovalFacade(*Dyn);
+	if (!RemovalFacade.IsValid())
+	{
+		const GeometryCollection::Facades::FCollectionRemoveOnBreakFacade RestFacade(*Rest->GetGeometryCollection());
+		if (RestFacade.IsValid())
+		{
+			// 엔진이 곧 초기화함. 다음 틱에 덮어씀
+			return;
+		}
+		// 에셋에 RemoveOnBreak 노드가 없어도 같은 규칙이 돌도록 동적 속성을 직접 정의
+		FGeometryCollectionDecayDynamicFacade(*Dyn).AddAttributes();
+		RemovalFacade.DefineSchema();
+	}
+
+	TManagedArray<float>* PostBreak = Dyn->FindAttributeTyped<float>(PostBreakDurationName, FGeometryCollection::TransformGroup);
+	TManagedArray<float>* RemovalDuration = Dyn->FindAttributeTyped<float>(BreakRemovalDurationName, FGeometryCollection::TransformGroup);
+	if (!PostBreak || !RemovalDuration)
+	{
+		return;
+	}
+
+	const FWaxBreakablePartSettings& S = GetPartSettings();
+	const TManagedArray<TSet<int32>>& Children = Rest->GetGeometryCollection()->Children;
+	const int32 Num = FMath::Min3(PostBreak->Num(), RemovalDuration->Num(), Children.Num());
+	FRandomStream Rand(RemovalSeed);
+	for (int32 Index = 0; Index < Num; ++Index)
+	{
+		const float Life = RandInRange(Rand, S.FragmentLifeSecRange);
+		const float Shrink = RandInRange(Rand, S.FragmentShrinkSecRange);
+		if (Children[Index].Num() > 0)
+		{
+			// 덩어리는 축소하지 않고 낱개로 흩어짐(크럼블) → 조각마다 따로 수명이 흐름
+			(*PostBreak)[Index] = S.ClusterCrumbleDelaySec;
+			(*RemovalDuration)[Index] = FGeometryCollectionRemoveOnBreakDynamicFacade::CrumblingRemovalTimer;
+		}
+		else
+		{
+			(*PostBreak)[Index] = Life;
+			(*RemovalDuration)[Index] = Shrink;
+		}
+	}
 }
 
 void UWaxBreakablePartComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	const float Now = GetNow();
-	if (!bReleased && ReanchorUntil >= Now && GFrameCounter >= ReanchorEarliestFrame)
+	if (NeedsAnchorRule())
 	{
-		ReanchorBody();
-	}
-
-	if (bDetached && DetachedExpireTime >= 0.0f && Now >= DetachedExpireTime && Collection)
-	{
-		DetachedExpireTime = -1.0f;
-		Collection->SetVisibility(false);
-		Collection->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		EnforceAnchorRule();
+		SyncFragmentRemovalTimers();
 	}
 
 	RefreshTickEnabled();
@@ -304,8 +391,7 @@ void UWaxBreakablePartComponent::TickComponent(float DeltaTime, ELevelTick TickT
 
 bool UWaxBreakablePartComponent::NeedsTick() const
 {
-	const float Now = GetNow();
-	return (!bReleased && ReanchorUntil >= Now) || DetachedExpireTime >= 0.0f;
+	return NeedsAnchorRule();
 }
 
 void UWaxBreakablePartComponent::RefreshTickEnabled()
@@ -411,8 +497,7 @@ void UWaxBreakablePartComponent::DetachWhole(const FVector& WorldPopVelocity)
 		Collection->ApplyPhysicsField(true, EGeometryCollectionPhysicsTypeEnum::Chaos_LinearVelocity, nullptr, UniformVelocity);
 	}
 
-	const float LifeSpan = GetPartSettings().DetachedLifeSpanSec;
-	DetachedExpireTime = LifeSpan > 0.0f ? GetNow() + LifeSpan : -1.0f;
+	ExtendLooseRule();
 	RefreshTickEnabled();
 }
 
@@ -448,6 +533,7 @@ void UWaxBreakablePartComponent::ReleaseAll(float ReleaseStrain)
 		UniformStrain->SetUniformScalar(ReleaseStrain);
 		Collection->ApplyPhysicsField(true, EGeometryCollectionPhysicsTypeEnum::Chaos_ExternalClusterStrain, nullptr, UniformStrain);
 	}
+	ExtendLooseRule();
 	RefreshTickEnabled();
 }
 
@@ -466,4 +552,13 @@ void UWaxBreakablePartComponent::PlayPartSound(USoundBase* Sound, const FVector&
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, Sound, Location, Volume, FMath::FRandRange(PitchRange.X, PitchRange.Y));
 	}
+}
+
+void UWaxBreakablePartComponent::ExtendLooseRule()
+{
+	// 모든 조각이 흩어지고 수명·축소를 마칠 때까지 정리 규칙을 유지
+	const FWaxBreakablePartSettings& S = GetPartSettings();
+	const float MaxLife = FMath::Max(S.FragmentLifeSecRange.X, S.FragmentLifeSecRange.Y);
+	const float MaxShrink = FMath::Max(S.FragmentShrinkSecRange.X, S.FragmentShrinkSecRange.Y);
+	LooseRuleUntil = FMath::Max(LooseRuleUntil, GetNow() + S.ClusterCrumbleDelaySec + S.DetachShatterDelaySec + MaxLife + MaxShrink + 1.0f);
 }

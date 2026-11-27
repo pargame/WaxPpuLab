@@ -53,9 +53,10 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR �
   - `ShellCollection` / `EyeLeftGC` / `EyeRightGC` (`UGeometryCollectionComponent`): Chaos 파괴 부위. 생성 기본값은 한 곳(`CreateBreakableCollection`)에서 공유합니다.
   - `CoreMesh` + `AWaxMonsterCore`: 붕괴 시 탄성 물리(`PM_JellyBounce`)로 튀며 방출되는 코어 및 부활 루프.
 - **파괴 부위 계층**:
-  - `UWaxBreakablePartComponent` (부위 공통): GC 하나의 타격(Strain 필드) → 깨짐 → 처리 규칙 → 수명. 규칙은 `EWaxBreakMode`로 고릅니다.
-    - `ChipAndRetainBody` (껍질): 깨진 조각만 떨어지고, 깨진 다음 프레임에 가장 큰 남은 덩어리를 Kinematic으로 되돌려 몸에 계속 붙입니다.
-    - `DetachWholeOnBreak` (눈): 처음 깨지는 순간 부위 전체가 몸에서 떨어져 튀어나가고, `DetachedLifeSpanSec` 뒤 사라집니다.
+  - `UWaxBreakablePartComponent` (부위 공통): GC 하나의 타격(Strain 필드만) → 깨짐 → 처리 규칙 → 조각별 수명. 규칙은 `EWaxBreakMode`로 고릅니다.
+    - 공통 규칙: Kinematic(몸에 붙어 컴포넌트를 따라감)은 남은 본체 하나에만 허용하고, 나머지 활성 조각·덩어리는 매 틱 Dynamic으로 떨어뜨립니다. 떨어진 덩어리는 낱개로 흩어지고(크럼블), 낱개 조각은 엔진 `RemoveOnBreak`로 조각마다 수명 후 줄어들어 사라집니다.
+    - `ChipAndRetainBody` (껍질): 깨진 조각만 떨어지고 가장 큰 Kinematic 덩어리는 몸에 계속 붙습니다.
+    - `DetachWholeOnBreak` (눈): 처음 깨지는 순간 부위 전체가 몸에서 떨어져 튀어나가고, 이후 조각은 같은 수명 규칙으로 사라집니다.
   - `UWaxDestructibleComponent` (껍질 전용, 위 계층 상속): 경도 존, 남은 비율 기반 전체 붕괴, 물리 기반 MetaSound 깨짐·충돌음.
   - `EyeLeftPart` / `EyeRightPart`: 눈 GC에 붙는 부위 공통 컴포넌트 인스턴스.
 - **전략 로코모션 (`UWaxLocomotionComponent`)**:
@@ -63,7 +64,7 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR �
   - `UWaxButterLocomotionComponent`: `BP_WaxButter`용 `HopAlign → LayDown → TumbleCharge → StandUp` 4단계 FSM 및 전·후면 최단각 양방향 텀블링(`TumbleDirectionSign`). 굴림 목표는 눕는 순간의 플레이어 위치와 실시간 위치를 `TargetTrackingRatio`로 섞어 정합니다.
 
 ### 3. 핵심 서브시스템 설계
-- **고정 수명 파편 제거 (`RemoveOnBreak`)**: `DF_WaxOrb`, `DF_WaxButter`, `DF_MonsterEye` Dataflow에 `FRemoveOnBreakDataflowNode`(`PostBreakTimer 1.5~2.0s`, `RemovalTimer 0.35~0.45s`, `ScaleOnRemoval=True`)를 삽입하고 `bAllowRemovalOnBreak=true`, `bAllowRemovalOnSleep=false`로 고정해 바닥 잔류 파편·소음을 차단합니다.
+- **조각별 수명 후 축소 제거 (`RemoveOnBreak`)**: 엔진 `RemoveOnBreak`(GC 에셋 `bScaleOnRemoval=True`, `bAllowRemovalOnBreak=true`, `bAllowRemovalOnSleep=false`)를 그대로 쓰되, 시간 값은 부위 설정(DA `ShellPart`/`EyePart`의 `FragmentLifeSecRange`·`FragmentShrinkSecRange`·`ClusterCrumbleDelaySec`)이 GC 동적 속성(`PostBreakDuration`/`BreakRemovalDuration`)에 덮어씁니다. Dataflow `RemoveOnBreak` 노드 값은 쓰이지 않으며, 노드가 없는 에셋도 같은 규칙이 돕니다.
 - **물리 기반 하이브리드 ASMR 오디오**: `MS_WaxCrackASMR` 프리셋과 `FWaxCollisionVariant` 구조체로 파괴음과 파편 충돌음을 이원화합니다. 파괴 시 다중 그레인 클리핑 방지를 위해 `QueueDensityScale`을 적용하고, 충돌음은 `AccumulatedImpulse`·`Mass`·`NormalSpeed`에서 산출한 음향 압력($\sqrt{E}$)에 Weber-Fechner 로그 라우드니스 압축과 지수 분포 쿨다운을 적용합니다.
 - **Subsurface 밀랍 셰이딩 & 순수 발광 타게팅**:
   - `M_WaxButter`: `Subsurface` 셰이딩(따뜻한 노란 밀랍 + `Roughness 0.18` / `Specular 0.60`). `MPC_WaxTargeting` 구체 마스크 내부에서는 `BaseColor`와 `SubsurfaceColor`를 `0`으로 차단하고 `MarkerColor * EmissiveBoost`만 다이렉트 출력해 바탕 왁스 색과 무관하게 선명한 조준 표시를 유지합니다.
@@ -97,7 +98,7 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR �
 
 - 몬스터·파괴 부위·공격 코드는 DA를 직접 읽습니다(복사본 필드 없음).
 - 플레이어(`AWaxPpuLabCharacter`)와 로코모션 컴포넌트에 같은 이름으로 보이는 필드는 초기화 때 DA에서 복사된 읽기 전용(`VisibleInstanceOnly`) 값입니다. 여기서 바꿔도 반영되지 않습니다.
-- 깨진 조각이 사라지는 타이밍만은 DA가 아니라 GC 에셋의 Dataflow(`DF_WaxOrb`, `DF_WaxButter`, `DF_MonsterEye`의 `RemoveOnBreak` 노드)에서 정합니다.
+- 깨진 조각이 사라지는 타이밍도 DA(`ShellPart`/`EyePart` → `Lifecycle`)가 원본입니다. GC 에셋 Dataflow `RemoveOnBreak` 노드 값은 무시됩니다.
 
 **어디서 고치나 (자주 찾는 항목)**
 
@@ -111,7 +112,7 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR �
 | 눈이 얼마나 단단한가·탈락 연출 | 몬스터 DA → `Eyes.EyePart` |
 | 몇 % 깨지면 전체 붕괴 | 몬스터 DA → `Destruction.CollapseRemainingRatio` |
 | 깨짐·충돌 소리 | 몬스터 DA → `Audio`, `DestructionAudio`(`CrackSynth` 포함) |
-| 깨진 조각이 사라지는 시간 | GC 에셋 Dataflow `RemoveOnBreak` 노드 |
+| 깨진 조각이 사라지는 시간·줄어드는 속도 | 몬스터 DA → `ShellPart`/`EyePart` → `FragmentLifeSecRange`, `FragmentShrinkSecRange`, `ClusterCrumbleDelaySec` |
 
 > **팁 (일괄 비교·수정)**: 콘텐츠 브라우저에서 `DA_WaxBall_Basic`, `DA_WaxButter`를 함께 선택 → 우클릭 → **Asset Actions → Edit Selection in Property Matrix**로 표 형태 일괄 편집이 가능합니다.
 
@@ -136,7 +137,7 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR �
 |---|---|---|
 | **Break** | `BreakMode`, `HitsToBreak`, `DamageThreshold`, `SubLevelThresholdRatios` | 처리 규칙(껍질 `ChipAndRetainBody`, 눈 `DetachWholeOnBreak`), 깨지기 시작할 때까지 타격 수, 1단계 임계값(0이면 GC 에셋 값)과 2·3단계 비율 |
 | **Hit** | `HitAcceptRadius`, `MinImpactRadius`, `StrainEdgeRatio` | 타격 판정 여유 거리(0이면 검사 안 함), 이 부위에 적용되는 최소 타격 반경, 가장자리 세기 비율 |
-| **Lifecycle** | `ReanchorWindowSec`, `DetachPopVelocity`, `DetachedLifeSpanSec`, `DetachShatterDelaySec`, `ShatterStrainScale` | 남은 몸통 재고정 검사 시간, 탈락 시 튀는 속도(앞·바깥 옆·위), 탈락 부위가 사라지는 시간, 붕괴로 탈락한 부위가 산산조각 나기까지 시간과 세기 배율 |
+| **Lifecycle** | `FragmentLifeSecRange`, `FragmentShrinkSecRange`, `ClusterCrumbleDelaySec`, `DetachPopVelocity`, `DetachShatterDelaySec`, `ShatterStrainScale` | 조각이 깨진 순간부터 유지되는 시간과 줄어드는 시간(조각마다 범위 내 무작위), 떨어진 덩어리가 낱개로 흩어지기까지 시간(껍질 0, 눈 1.0 — 붕괴 탈락 눈이 통째로 떨어진 뒤 부서지도록), 탈락 시 튀는 속도(앞·바깥 옆·위), 붕괴로 탈락한 부위가 산산조각 나기까지 시간과 세기 배율 |
 | **Debris** | `DebrisKickEdgeRatio`, `DebrisKickRangeMargin` | 파편 걷어차기 가장자리 비율, 검사 여유 거리 |
 | **Audio** | `HitSound`, `HitSoundVolume`, `HitSoundPitchRange`, `BreakSound`, `BreakSoundVolume`, `BreakSoundPitchRange` | 버틴 타격음·깨짐음(눈에서 사용, 껍질은 `DestructionAudio` 합성음 사용) |
 
@@ -167,7 +168,7 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR �
 ### 4. BP에 남는 항목
 - **플레이어 BP** (`BP_WaxPlayer`, `BP_FirstPersonCharacter`): `PlayerData`, 입력 액션, `bThirdPersonPreview`(개발용 기본 3인칭, T 토글), `TestMonsterClass(es)`, `WaxSpawnDistance`, Combat 컴포넌트의 `AttackSet`·`TargetingMPC`·`bShowImpactMarker`·`bShowDebugImpact`·로그 토글
 - **몬스터 BP** (`BP_WaxBall_Basic`, `BP_WaxButter`): `MonsterData`, `WaxDestructible.bShowDebugCounters`
-- **에셋 측**: GC 에셋 `DamageThreshold`, Dataflow `RemoveOnBreak`(조각 제거 타이밍)
+- **에셋 측**: GC 에셋 `DamageThreshold`, `bScaleOnRemoval`(꺼져 있으면 조각이 줄지 않고 바로 사라짐, 경고 로그 출력)
 
 ---
 
