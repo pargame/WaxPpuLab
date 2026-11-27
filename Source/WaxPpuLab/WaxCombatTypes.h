@@ -157,9 +157,9 @@ struct FWaxAttackSpec
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Knockback", meta = (ClampMin = "0.0"))
 	float DebrisImpulseRadius = 0.0f;
 
-	/** 공격 동안 1인칭 카메라의 머리 추종을 끔 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
-	bool bSuppressHeadFollow = false;
+	/** 공격 동안 1인칭 카메라가 머리 움직임을 따라가는 배율 (0~1). 낮추면 동작 중 시점 흔들림이 줄고, 0이면 머리 추종을 끔 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float HeadFollowScale = 1.0f;
 
 	/** 선딜(Windup) 회전 제한 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rotation")

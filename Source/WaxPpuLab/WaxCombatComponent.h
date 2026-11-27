@@ -109,7 +109,8 @@ public:
 	float GetPitchRateLimit() const;
 
 	/** 공격 중 1인칭 머리 추종을 끌지 여부 */
-	bool ShouldSuppressHeadFollow() const;
+	/** 현재 공격의 머리 추종 배율 (공격 중이 아니면 1) */
+	float GetHeadFollowScale() const;
 
 	/** 현재 공격 단계에서 점프 가능 여부 (비공격 시 항상 true) */
 	UFUNCTION(BlueprintPure, Category = "WaxCombat")

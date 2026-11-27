@@ -649,9 +649,9 @@ float UWaxCombatComponent::GetPitchRateLimit() const
 	return IsAttacking() ? GetActiveRotationProfile().MaxPitchRateDegPerSec : 0.0f;
 }
 
-bool UWaxCombatComponent::ShouldSuppressHeadFollow() const
+float UWaxCombatComponent::GetHeadFollowScale() const
 {
-	return IsAttacking() && CurrentSpec.bSuppressHeadFollow;
+	return IsAttacking() ? CurrentSpec.HeadFollowScale : 1.0f;
 }
 
 float UWaxCombatComponent::FilterLookDelta(float Delta, float Offset, float MaxOffset) const

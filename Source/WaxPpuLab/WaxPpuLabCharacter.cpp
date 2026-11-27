@@ -344,7 +344,7 @@ void AWaxPpuLabCharacter::UpdateFirstPersonCamera(float DeltaTime)
 		const FRotator LocalControlRot = (GetControlRotation() - GetActorRotation()).GetNormalized();
 		TargetLoc += LocalControlRot.RotateVector(ThirdPersonPreviewOffset);
 	}
-	else if (HeadFollowAlpha > KINDA_SMALL_NUMBER && !(CombatComponent && CombatComponent->ShouldSuppressHeadFollow()) && FirstPersonMesh && !HeadSocketName.IsNone() && FirstPersonMesh->DoesSocketExist(HeadSocketName))
+	else if (HeadFollowAlpha * (CombatComponent ? CombatComponent->GetHeadFollowScale() : 1.0f) > KINDA_SMALL_NUMBER && FirstPersonMesh && !HeadSocketName.IsNone() && FirstPersonMesh->DoesSocketExist(HeadSocketName))
 	{
 		const FVector HeadWorld = FirstPersonMesh->GetSocketLocation(HeadSocketName);
 		const FVector HeadLocal = GetActorTransform().InverseTransformPosition(HeadWorld);
@@ -354,7 +354,7 @@ void AWaxPpuLabCharacter::UpdateFirstPersonCamera(float DeltaTime)
 			bHasCachedHeadRef = true;
 		}
 
-		FVector HeadDelta = (HeadLocal - CachedHeadRefLocal) * HeadFollowAlpha;
+		FVector HeadDelta = (HeadLocal - CachedHeadRefLocal) * HeadFollowAlpha * (CombatComponent ? CombatComponent->GetHeadFollowScale() : 1.0f);
 		HeadDelta.X = FMath::Clamp(HeadDelta.X, -MaxHeadForwardOffset, MaxHeadForwardOffset);
 		TargetLoc += HeadDelta;
 	}
