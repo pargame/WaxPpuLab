@@ -31,6 +31,9 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void FellOutOfWorld(const UDamageType& DmgType) override;
+	virtual void OutsideWorldBounds() override;
 
 	UFUNCTION(BlueprintCallable, Category = "WaxMonster")
 	void InitializeFromData(UWaxMonsterDataAsset* InData);
@@ -77,6 +80,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxMonster")
 	TObjectPtr<UWaxMonsterDataAsset> MonsterData;
 
+	/** 화면에 살아있는 몬스터 수와 몬스터별 상태(위치·속도·껍질 위치 차이·남은 비율)를 표시하고, 사라짐 원인을 로그로 남김 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxMonster|Debug")
+	bool bShowDebugStatus = true;
+
 protected:
 	virtual void UpdateMonsterMovement(float DeltaTime);
 
@@ -97,6 +104,7 @@ private:
 	void ConfigureEye(UGeometryCollectionComponent* EyeGC, UWaxBreakablePartComponent* EyePart, float LateralSign);
 	void StartHitSlowdown();
 	void ApplyKnockbackNow(const FVector& Velocity, float DurationSec);
+	void DrawDebugStatus();
 
 	EWaxMonsterState MonsterState = EWaxMonsterState::Active;
 	FTimerHandle EyeTimeoutHandle;
@@ -105,4 +113,5 @@ private:
 	float PendingKnockbackDuration = 0.0f;
 	uint64 PendingKnockbackFrame = 0;
 	bool bHasPendingKnockback = false;
+	bool bReportedAbnormal = false;
 };

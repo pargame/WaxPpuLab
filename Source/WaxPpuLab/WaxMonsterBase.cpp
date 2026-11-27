@@ -3,7 +3,9 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GeometryCollection/GeometryCollectionComponent.h"
 #include "GeometryCollection/GeometryCollectionObject.h"
@@ -15,6 +17,8 @@
 #include "WaxLocomotionComponent.h"
 #include "WaxMonsterCore.h"
 #include "WaxMonsterDataAsset.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogWaxMonster, Log, All);
 
 AWaxMonsterBase::AWaxMonsterBase()
 {
@@ -226,6 +230,8 @@ void AWaxMonsterBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	DrawDebugStatus();
+
 	if (MonsterState != EWaxMonsterState::Active)
 	{
 		return;
@@ -265,6 +271,12 @@ bool AWaxMonsterBase::ReceiveHit_Implementation(const FWaxHitPayload& Payload)
 	if (MonsterState != EWaxMonsterState::Active)
 	{
 		return false;
+	}
+
+	if (bShowDebugStatus)
+	{
+		UE_LOG(LogWaxMonster, Log, TEXT("WaxMonster Hit actor=%s distToCenter=%.0f radius=%.0f strain=%.0f knock=(%.0f,%.0f)"),
+			*GetName(), FVector::Dist(Payload.Center, GetActorLocation()), Payload.Radius, Payload.Strain, Payload.KnockbackHorizontal, Payload.KnockbackVertical);
 	}
 
 	for (UWaxBreakablePartComponent* EyePart : { EyeLeftPart.Get(), EyeRightPart.Get() })
@@ -453,4 +465,71 @@ void AWaxMonsterBase::HandleWaxCollapsed(AActor* CollapsedActor)
 	BP_OnWaxCollapsed(SpawnedCore);
 
 	SetLifeSpan(GetMonsterData().DebrisLifeSpanAfterCollapse);
+}
+
+void AWaxMonsterBase::DrawDebugStatus()
+{
+#if !UE_BUILD_SHIPPING
+	if (!bShowDebugStatus || !GetWorld())
+	{
+		return;
+	}
+
+	const FVector Loc = GetActorLocation();
+	const FVector Vel = GetVelocity();
+	const float ShellOffset = ShellCollection ? FVector::Dist(ShellCollection->Bounds.Origin, Loc) : 0.0f;
+	const float Remaining = WaxDestructible ? WaxDestructible->GetRemainingRatio() : 1.0f;
+
+	// 좌표·속도·껍질 위치가 비정상이면 한 번만 로그 (밀려남인지 소멸인지 구분용)
+	if (!bReportedAbnormal && (Loc.Size() > 1.0e6f || Vel.Size() > 2.0e4f || ShellOffset > 1000.0f || Loc.ContainsNaN()))
+	{
+		bReportedAbnormal = true;
+		UE_LOG(LogWaxMonster, Warning, TEXT("WaxMonster Abnormal actor=%s loc=%s vel=%.0f shellOffset=%.0f state=%d"),
+			*GetName(), *Loc.ToString(), Vel.Size(), ShellOffset, static_cast<int32>(MonsterState));
+	}
+
+	if (!GEngine)
+	{
+		return;
+	}
+
+	int32 ActiveCount = 0;
+	int32 TotalCount = 0;
+	for (TActorIterator<AWaxMonsterBase> It(GetWorld()); It; ++It)
+	{
+		if (IsValid(*It))
+		{
+			++TotalCount;
+			ActiveCount += It->MonsterState == EWaxMonsterState::Active ? 1 : 0;
+		}
+	}
+	GEngine->AddOnScreenDebugMessage(9980, 0.0f, FColor::Green, FString::Printf(TEXT("[WaxMonsters] alive=%d total=%d"), ActiveCount, TotalCount));
+
+	const FColor LineColor = (ShellOffset > 150.0f || Vel.Size() > 3000.0f) ? FColor::Red : FColor::White;
+	GEngine->AddOnScreenDebugMessage(static_cast<uint64>(9000000 + GetUniqueID()), 0.0f, LineColor,
+		FString::Printf(TEXT("  %s pos=(%.0f, %.0f, %.0f) speed=%.0f shellOffset=%.0f remain=%.0f%% shellVisible=%d"),
+			*GetName(), Loc.X, Loc.Y, Loc.Z, Vel.Size(), ShellOffset, Remaining * 100.0f, ShellCollection && ShellCollection->IsVisible() ? 1 : 0));
+#endif
+}
+
+void AWaxMonsterBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (bShowDebugStatus)
+	{
+		UE_LOG(LogWaxMonster, Log, TEXT("WaxMonster EndPlay actor=%s reason=%d state=%d loc=%s"),
+			*GetName(), static_cast<int32>(EndPlayReason), static_cast<int32>(MonsterState), *GetActorLocation().ToString());
+	}
+	Super::EndPlay(EndPlayReason);
+}
+
+void AWaxMonsterBase::FellOutOfWorld(const UDamageType& DmgType)
+{
+	UE_LOG(LogWaxMonster, Warning, TEXT("WaxMonster FellOutOfWorld actor=%s loc=%s vel=%.0f"), *GetName(), *GetActorLocation().ToString(), GetVelocity().Size());
+	Super::FellOutOfWorld(DmgType);
+}
+
+void AWaxMonsterBase::OutsideWorldBounds()
+{
+	UE_LOG(LogWaxMonster, Warning, TEXT("WaxMonster OutsideWorldBounds actor=%s loc=%s vel=%.0f"), *GetName(), *GetActorLocation().ToString(), GetVelocity().Size());
+	Super::OutsideWorldBounds();
 }
