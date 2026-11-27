@@ -504,7 +504,7 @@ void UWaxButterLocomotionComponent::TickHopAlign(float DeltaTime)
 
 		if (StateElapsed >= HopPauseDuration)
 		{
-			const float ChargeThreshold = FMath::Max(OwnerMonster->StopDistanceToPlayer, MinChargeStartDistance);
+			const float ChargeThreshold = FMath::Max(OwnerMonster->GetMonsterData().StopDistanceToPlayer, MinChargeStartDistance);
 			if (FMath::Abs(DeltaYaw) <= AlignToleranceDeg && DistToPlayer > ChargeThreshold)
 			{
 				TumbleDirectionSign = bUseBackFace ? -1.0f : 1.0f;
@@ -634,7 +634,7 @@ void UWaxButterLocomotionComponent::TickTumbleCharge(float DeltaTime)
 		FVector DirToPlayer;
 		float DistToPlayer = 0.0f;
 		const bool bHasPlayer = GetTumbleTarget(DirToPlayer, DistToPlayer);
-		if (!bHasPlayer || DistToPlayer <= OwnerMonster->StopDistanceToPlayer || TumbleStepIndex >= MaxTumbleSteps)
+		if (!bHasPlayer || DistToPlayer <= OwnerMonster->GetMonsterData().StopDistanceToPlayer || TumbleStepIndex >= MaxTumbleSteps)
 		{
 			EnterState(EWaxButterLocoState::StandUp);
 			return;

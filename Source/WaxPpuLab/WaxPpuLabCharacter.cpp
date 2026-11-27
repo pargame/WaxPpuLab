@@ -15,6 +15,7 @@
 #include "Misc/CommandLine.h"
 #include "TimerManager.h"
 #include "WaxCombatComponent.h"
+#include "WaxBreakablePartComponent.h"
 #include "WaxDestructibleComponent.h"
 #include "WaxMonsterBase.h"
 #include "WaxMonsterDataAsset.h"
@@ -216,7 +217,7 @@ void AWaxPpuLabCharacter::UpdateDebrisKick()
 	const FVector KickOrigin = GetActorLocation() + FVector(0.0f, 0.0f, -35.0f);
 	const FVector KickVelocity = HorizVel * DebrisKickStrength + FVector(0.0f, 0.0f, DebrisKickUpwardBoost);
 
-	UWaxDestructibleComponent::KickDebrisInRadius(GetWorld(), KickOrigin, KickVelocity, DebrisKickRadius, this);
+	UWaxBreakablePartComponent::KickFragmentsInRadius(GetWorld(), KickOrigin, KickVelocity, DebrisKickRadius, this);
 }
 
 void AWaxPpuLabCharacter::BeginPlay()

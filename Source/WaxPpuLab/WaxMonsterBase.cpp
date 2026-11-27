@@ -4,13 +4,13 @@
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/World.h"
-#include "Field/FieldSystemObjects.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GeometryCollection/GeometryCollectionComponent.h"
 #include "GeometryCollection/GeometryCollectionObject.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
 #include "TimerManager.h"
+#include "WaxBreakablePartComponent.h"
 #include "WaxDestructibleComponent.h"
 #include "WaxLocomotionComponent.h"
 #include "WaxMonsterCore.h"
@@ -31,65 +31,45 @@ AWaxMonsterBase::AWaxMonsterBase()
 	BodyPivot = CreateDefaultSubobject<USceneComponent>(TEXT("BodyPivot"));
 	BodyPivot->SetupAttachment(GetCapsuleComponent());
 
-	ShellCollection = CreateDefaultSubobject<UGeometryCollectionComponent>(TEXT("ShellCollection"));
-	ShellCollection->SetupAttachment(BodyPivot);
-	ShellCollection->ObjectType = EObjectStateTypeEnum::Chaos_Object_Dynamic;
-	ShellCollection->bForceUpdateActiveTransforms = true;
-	ShellCollection->SetSimulatePhysics(true);
-	ShellCollection->SetEnableDamageFromCollision(false);
-	ShellCollection->bNotifyCollisions = true;
-	ShellCollection->SetNotifyRigidBodyCollision(true);
-	ShellCollection->SetNotifyBreaks(true);
-	ShellCollection->SetCollisionProfileName(TEXT("PhysicsActor"));
-	ShellCollection->SetCollisionObjectType(ECC_PhysicsBody);
-	ShellCollection->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
-	ShellCollection->bAllowRemovalOnSleep = false;
-	ShellCollection->bAllowRemovalOnBreak = true;
+	// 모든 파괴 부위 GC의 공통 기본 설정 (ObjectType은 Dynamic, 몸 고정은 UWaxBreakablePartComponent가 담당)
+	auto CreateBreakableCollection = [this](const TCHAR* Name, bool bCastShadow) -> UGeometryCollectionComponent*
+	{
+		UGeometryCollectionComponent* GC = CreateDefaultSubobject<UGeometryCollectionComponent>(Name);
+		GC->SetupAttachment(BodyPivot);
+		GC->ObjectType = EObjectStateTypeEnum::Chaos_Object_Dynamic;
+		GC->bForceUpdateActiveTransforms = true;
+		GC->SetSimulatePhysics(true);
+		GC->SetEnableDamageFromCollision(false);
+		GC->bNotifyCollisions = true;
+		GC->SetNotifyRigidBodyCollision(true);
+		GC->SetNotifyBreaks(true);
+		GC->SetCollisionProfileName(TEXT("PhysicsActor"));
+		GC->SetCollisionObjectType(ECC_PhysicsBody);
+		GC->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+		GC->bAllowRemovalOnSleep = false;
+		GC->bAllowRemovalOnBreak = true;
+		GC->SetCastShadow(bCastShadow);
+		return GC;
+	};
+
+	ShellCollection = CreateBreakableCollection(TEXT("ShellCollection"), true);
 
 	CoreMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CoreMesh"));
 	CoreMesh->SetupAttachment(BodyPivot);
 	CoreMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	CoreMesh->SetReceivesDecals(false);
 
-	auto InitEyeSubobject = [this](const TCHAR* Name) -> UGeometryCollectionComponent*
+	EyeLeftGC = CreateBreakableCollection(TEXT("EyeLeftGC"), false);
+	EyeRightGC = CreateBreakableCollection(TEXT("EyeRightGC"), false);
+	for (UGeometryCollectionComponent* EyeGC : { EyeLeftGC.Get(), EyeRightGC.Get() })
 	{
-		UGeometryCollectionComponent* EyeGC = CreateDefaultSubobject<UGeometryCollectionComponent>(Name);
-		EyeGC->SetupAttachment(BodyPivot);
-		EyeGC->ObjectType = EObjectStateTypeEnum::Chaos_Object_Dynamic;
-		EyeGC->bForceUpdateActiveTransforms = true;
-		EyeGC->SetSimulatePhysics(true);
-		EyeGC->SetEnableDamageFromCollision(false);
-		EyeGC->bNotifyCollisions = true;
-		EyeGC->SetNotifyRigidBodyCollision(true);
-		EyeGC->SetNotifyBreaks(true);
-		EyeGC->SetCollisionProfileName(TEXT("PhysicsActor"));
-		EyeGC->SetCollisionObjectType(ECC_PhysicsBody);
-		EyeGC->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 		EyeGC->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
-		EyeGC->bAllowRemovalOnSleep = false;
-		EyeGC->bAllowRemovalOnBreak = true;
-		EyeGC->SetCastShadow(false);
 		EyeGC->SetReceivesDecals(false);
-		return EyeGC;
-	};
-
-	EyeLeftGC = InitEyeSubobject(TEXT("EyeLeftGC"));
-	EyeRightGC = InitEyeSubobject(TEXT("EyeRightGC"));
+	}
 
 	WaxDestructible = CreateDefaultSubobject<UWaxDestructibleComponent>(TEXT("WaxDestructible"));
-}
-
-void AWaxMonsterBase::EnsureEyeFieldNodes()
-{
-	if (!EyeMaskFalloff)
-	{
-		EyeMaskFalloff = NewObject<URadialFalloff>(this);
-		EyeStrainFalloff = NewObject<URadialFalloff>(this);
-		EyeDynamicStateField = NewObject<UUniformInteger>(this);
-		EyeLocalDynamicField = NewObject<UCullingField>(this);
-		EyeUniformStrainField = NewObject<UUniformScalar>(this);
-		EyeVelocityField = NewObject<UUniformVector>(this);
-	}
+	EyeLeftPart = CreateDefaultSubobject<UWaxBreakablePartComponent>(TEXT("EyeLeftPart"));
+	EyeRightPart = CreateDefaultSubobject<UWaxBreakablePartComponent>(TEXT("EyeRightPart"));
 }
 
 void AWaxMonsterBase::EnsureLocomotionComponent()
@@ -126,66 +106,53 @@ void AWaxMonsterBase::BeginPlay()
 
 	if (WaxDestructible)
 	{
-		WaxDestructible->OnWaxImpactApplied.RemoveDynamic(this, &AWaxMonsterBase::HandleWaxImpactApplied);
-		WaxDestructible->OnWaxImpactApplied.AddDynamic(this, &AWaxMonsterBase::HandleWaxImpactApplied);
 		WaxDestructible->OnWaxCollapsed.RemoveDynamic(this, &AWaxMonsterBase::HandleWaxCollapsed);
 		WaxDestructible->OnWaxCollapsed.AddDynamic(this, &AWaxMonsterBase::HandleWaxCollapsed);
 	}
 
-	if (EyeLeftGC)
+	for (UWaxBreakablePartComponent* EyePart : { EyeLeftPart.Get(), EyeRightPart.Get() })
 	{
-		EyeLeftGC->OnChaosBreakEvent.RemoveDynamic(this, &AWaxMonsterBase::HandleLeftEyeBreak);
-		EyeLeftGC->OnChaosBreakEvent.AddDynamic(this, &AWaxMonsterBase::HandleLeftEyeBreak);
-	}
-	if (EyeRightGC)
-	{
-		EyeRightGC->OnChaosBreakEvent.RemoveDynamic(this, &AWaxMonsterBase::HandleRightEyeBreak);
-		EyeRightGC->OnChaosBreakEvent.AddDynamic(this, &AWaxMonsterBase::HandleRightEyeBreak);
+		if (EyePart)
+		{
+			EyePart->OnPartBroken.RemoveDynamic(this, &AWaxMonsterBase::HandleEyeBroken);
+			EyePart->OnPartBroken.AddDynamic(this, &AWaxMonsterBase::HandleEyeBroken);
+		}
 	}
 
 	InitializeFromData(MonsterData);
 }
 
-void AWaxMonsterBase::ConfigureEyeCollection(UGeometryCollectionComponent* EyeGC, const FVector& RelativeLoc)
+void AWaxMonsterBase::ConfigureEye(UGeometryCollectionComponent* EyeGC, UWaxBreakablePartComponent* EyePart, float LateralSign)
 {
-	if (!EyeGC || !MonsterData)
+	if (!EyeGC || !EyePart || !MonsterData)
 	{
 		return;
 	}
 
-	EyeGC->SetRelativeLocation(RelativeLoc);
+	EyeGC->SetRelativeLocation(FVector(MonsterData->EyeForwardOffset, LateralSign * MonsterData->EyeSpacing, MonsterData->EyeHeightOffset));
 	EyeGC->SetRelativeRotation(FRotator::ZeroRotator);
 	EyeGC->SetRelativeScale3D(FVector(MonsterData->EyeScale));
 
-	if (MonsterData->EyeCollectionAsset)
-	{
-		const float EyeThresh = FMath::Max(1000.0f, MonsterData->EyeDamageThreshold);
-		EyeGC->DamageThreshold = { EyeThresh, EyeThresh * 0.5f, EyeThresh * 0.25f };
-		EyeGC->SetRestCollection(MonsterData->EyeCollectionAsset, true);
-		if (MonsterData->EyeMaterial)
-		{
-			EyeGC->SetMaterial(0, MonsterData->EyeMaterial);
-			EyeGC->SetMaterial(1, MonsterData->EyeMaterial);
-		}
-		EyeGC->SetVisibility(true);
-		EyeGC->SetCollisionProfileName(TEXT("PhysicsActor"));
-		EyeGC->SetCollisionObjectType(ECC_PhysicsBody);
-		EyeGC->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
-		EyeGC->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
-		EyeGC->bAllowRemovalOnSleep = false;
-		EyeGC->bAllowRemovalOnBreak = true;
-		EyeGC->SetSimulatePhysics(true);
-		EyeGC->SetNotifyBreaks(true);
-
-		EnsureEyeFieldNodes();
-		EyeDynamicStateField->SetUniformInteger(static_cast<int32>(EObjectStateTypeEnum::Chaos_Object_Kinematic));
-		EyeGC->ApplyPhysicsField(true, EGeometryCollectionPhysicsTypeEnum::Chaos_DynamicState, nullptr, EyeDynamicStateField);
-	}
-	else
+	if (!MonsterData->EyeCollectionAsset)
 	{
 		EyeGC->SetVisibility(false);
 		EyeGC->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		EyePart->InitializePart(nullptr, nullptr, nullptr, nullptr);
+		return;
 	}
+
+	if (MonsterData->EyeMaterial)
+	{
+		EyeGC->SetMaterial(0, MonsterData->EyeMaterial);
+		EyeGC->SetMaterial(1, MonsterData->EyeMaterial);
+	}
+	EyeGC->SetVisibility(true);
+	EyeGC->SetCollisionProfileName(TEXT("PhysicsActor"));
+	EyeGC->SetCollisionObjectType(ECC_PhysicsBody);
+	EyeGC->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	EyeGC->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+
+	EyePart->InitializePart(EyeGC, MonsterData->EyeCollectionAsset, &MonsterData->EyePart, MonsterData, LateralSign);
 }
 
 void AWaxMonsterBase::InitializeFromData(UWaxMonsterDataAsset* InData)
@@ -193,18 +160,9 @@ void AWaxMonsterBase::InitializeFromData(UWaxMonsterDataAsset* InData)
 	MonsterData = InData;
 	MonsterState = EWaxMonsterState::Active;
 	HitSlowdownRemaining = 0.0f;
-	LeftEyeDamage = 0.0f;
-	RightEyeDamage = 0.0f;
-	bLeftEyeBroken = false;
-	bRightEyeBroken = false;
 
 	if (MonsterData)
 	{
-		StopDistanceToPlayer = MonsterData->StopDistanceToPlayer;
-		bChasePlayer = MonsterData->bChasePlayer;
-		bEnableHitSlowdown = MonsterData->bEnableHitSlowdown;
-		HitSlowdownDuration = MonsterData->HitSlowdownDuration;
-		HitSlowdownSpeedMultiplier = MonsterData->HitSlowdownSpeedMultiplier;
 		if (UCapsuleComponent* Capsule = GetCapsuleComponent())
 		{
 			Capsule->SetCapsuleSize(FMath::Max(10.0f, MonsterData->CapsuleRadius), FMath::Max(10.0f, MonsterData->CapsuleHalfHeight));
@@ -234,8 +192,8 @@ void AWaxMonsterBase::InitializeFromData(UWaxMonsterDataAsset* InData)
 			CoreMesh->SetVisibility(MonsterData->CoreMeshAsset != nullptr);
 		}
 
-		ConfigureEyeCollection(EyeLeftGC, FVector(MonsterData->EyeForwardOffset, -MonsterData->EyeSpacing, MonsterData->EyeHeightOffset));
-		ConfigureEyeCollection(EyeRightGC, FVector(MonsterData->EyeForwardOffset, MonsterData->EyeSpacing, MonsterData->EyeHeightOffset));
+		ConfigureEye(EyeLeftGC, EyeLeftPart, -1.0f);
+		ConfigureEye(EyeRightGC, EyeRightPart, 1.0f);
 	}
 
 	EnsureLocomotionComponent();
@@ -248,7 +206,20 @@ void AWaxMonsterBase::InitializeFromData(UWaxMonsterDataAsset* InData)
 
 int32 AWaxMonsterBase::GetIntactEyeCount() const
 {
-	return (bLeftEyeBroken ? 0 : 1) + (bRightEyeBroken ? 0 : 1);
+	int32 Count = 0;
+	for (const UWaxBreakablePartComponent* EyePart : { EyeLeftPart.Get(), EyeRightPart.Get() })
+	{
+		if (EyePart && EyePart->GetCollection() && !EyePart->IsBroken())
+		{
+			++Count;
+		}
+	}
+	return Count;
+}
+
+const UWaxMonsterDataAsset& AWaxMonsterBase::GetMonsterData() const
+{
+	return MonsterData ? *MonsterData : *GetDefault<UWaxMonsterDataAsset>();
 }
 
 void AWaxMonsterBase::Tick(float DeltaTime)
@@ -258,6 +229,12 @@ void AWaxMonsterBase::Tick(float DeltaTime)
 	if (MonsterState != EWaxMonsterState::Active)
 	{
 		return;
+	}
+
+	if (bHasPendingKnockback && GFrameCounter >= PendingKnockbackFrame)
+	{
+		bHasPendingKnockback = false;
+		ApplyKnockbackNow(PendingKnockbackVelocity, PendingKnockbackDuration);
 	}
 
 	if (HitSlowdownRemaining > 0.0f)
@@ -273,7 +250,7 @@ void AWaxMonsterBase::Tick(float DeltaTime)
 		}
 	}
 
-	if (bChasePlayer)
+	if (GetMonsterData().bChasePlayer)
 	{
 		UpdateMonsterMovement(DeltaTime);
 	}
@@ -283,23 +260,50 @@ void AWaxMonsterBase::Tick(float DeltaTime)
 	}
 }
 
-void AWaxMonsterBase::ReceiveWaxImpact(const FVector& WorldImpactPoint, float BaseStrain, float Radius)
+bool AWaxMonsterBase::ReceiveHit_Implementation(const FWaxHitPayload& Payload)
 {
-	ApplyEyeImpact(WorldImpactPoint, BaseStrain, Radius);
+	if (MonsterState != EWaxMonsterState::Active)
+	{
+		return false;
+	}
+
+	for (UWaxBreakablePartComponent* EyePart : { EyeLeftPart.Get(), EyeRightPart.Get() })
+	{
+		if (EyePart)
+		{
+			IWaxHittable::Execute_ReceiveHit(EyePart, Payload);
+		}
+	}
 
 	if (WaxDestructible && !WaxDestructible->HasCollapsed())
 	{
-		WaxDestructible->ApplyWaxImpact(WorldImpactPoint, BaseStrain, Radius);
+		IWaxHittable::Execute_ReceiveHit(WaxDestructible, Payload);
 	}
+
+	StartHitSlowdown();
+
+	// 깨진 껍질이 다음 프레임에 몸에 다시 고정된 뒤 밀리도록 넉백을 몇 프레임 늦춤
+	if (Payload.HasKnockback() && MonsterState == EWaxMonsterState::Active)
+	{
+		const FVector Velocity = Payload.ComputeKnockbackVelocity(GetActorLocation());
+		const int32 DelayFrames = GetMonsterData().KnockbackDelayFrames;
+		if (DelayFrames <= 0)
+		{
+			ApplyKnockbackNow(Velocity, Payload.KnockbackDurationSec);
+		}
+		else
+		{
+			PendingKnockbackVelocity = Velocity;
+			PendingKnockbackDuration = Payload.KnockbackDurationSec;
+			PendingKnockbackFrame = GFrameCounter + DelayFrames;
+			bHasPendingKnockback = true;
+		}
+	}
+	return true;
 }
 
-void AWaxMonsterBase::ReceiveKnockback(const FVector& Velocity, float DurationSec)
+void AWaxMonsterBase::ApplyKnockbackNow(const FVector& Velocity, float DurationSec)
 {
-	if (MonsterState != EWaxMonsterState::Active || Velocity.IsNearlyZero())
-	{
-		return;
-	}
-
 	if (ActiveLocomotion)
 	{
 		ActiveLocomotion->SuspendFor(DurationSec);
@@ -307,94 +311,23 @@ void AWaxMonsterBase::ReceiveKnockback(const FVector& Velocity, float DurationSe
 	LaunchCharacter(Velocity, true, true);
 }
 
-void AWaxMonsterBase::ApplyEyeImpact(const FVector& WorldImpactPoint, float BaseStrain, float Radius)
+void AWaxMonsterBase::HandleEyeBroken(UWaxBreakablePartComponent* Part, FVector WorldLocation)
 {
-	if (MonsterState != EWaxMonsterState::Active || Radius <= 0.0f)
-	{
-		return;
-	}
-
-	ApplyImpactToSingleEye(EyeLeftGC, bLeftEyeBroken, LeftEyeDamage, WorldImpactPoint, BaseStrain, Radius);
-	ApplyImpactToSingleEye(EyeRightGC, bRightEyeBroken, RightEyeDamage, WorldImpactPoint, BaseStrain, Radius);
-}
-
-void AWaxMonsterBase::ApplyImpactToSingleEye(UGeometryCollectionComponent* EyeGC, bool& bBrokenFlag, float& AccumulatedDamage, const FVector& WorldImpactPoint, float BaseStrain, float Radius)
-{
-	if (!EyeGC || !EyeGC->IsVisible() || !MonsterData || !MonsterData->EyeCollectionAsset)
-	{
-		return;
-	}
-
-	const float EyeRadius = MonsterData->EyeBaseHitRadius * MonsterData->EyeScale;
-	const float Dist = FVector::Dist(WorldImpactPoint, EyeGC->GetComponentLocation());
-	if (Dist > (Radius + EyeRadius))
-	{
-		return;
-	}
-
-	if (!bBrokenFlag)
-	{
-		const float Durability = FMath::Max(1.0f, MonsterData->EyeDurability);
-		AccumulatedDamage += 1.0f;
-		if (AccumulatedDamage < Durability)
-		{
-			if (MonsterData->EyeShatterSound && GetWorld())
-			{
-				UGameplayStatics::PlaySoundAtLocation(this, MonsterData->EyeShatterSound, EyeGC->GetComponentLocation(), 0.45f, FMath::FRandRange(1.45f, 1.7f));
-			}
-			return;
-		}
-	}
-
-	EnsureEyeFieldNodes();
-
-	const float EffectiveRadius = FMath::Max(Radius, EyeRadius * 2.5f);
-	EyeMaskFalloff->SetRadialFalloff(1.0f, 0.0f, 1.0f, 0.0f, EffectiveRadius, WorldImpactPoint, EFieldFalloffType::Field_FallOff_None);
-	EyeDynamicStateField->SetUniformInteger(static_cast<int32>(EObjectStateTypeEnum::Chaos_Object_Dynamic));
-	EyeLocalDynamicField->SetCullingField(EyeMaskFalloff, EyeDynamicStateField, EFieldCullingOperationType::Field_Culling_Outside);
-	EyeGC->ApplyPhysicsField(true, EGeometryCollectionPhysicsTypeEnum::Chaos_DynamicState, nullptr, EyeLocalDynamicField);
-
-	EyeStrainFalloff->SetRadialFalloff(BaseStrain, 0.85f, 1.0f, 0.0f, EffectiveRadius, WorldImpactPoint, EFieldFalloffType::Field_Falloff_Linear);
-	EyeGC->ApplyPhysicsField(true, EGeometryCollectionPhysicsTypeEnum::Chaos_ExternalClusterStrain, nullptr, EyeStrainFalloff);
-}
-
-void AWaxMonsterBase::HandleLeftEyeBreak(const FChaosBreakEvent& BreakEvent)
-{
-	NotifyEyeBroken(bLeftEyeBroken, BreakEvent.Location);
-}
-
-void AWaxMonsterBase::HandleRightEyeBreak(const FChaosBreakEvent& BreakEvent)
-{
-	NotifyEyeBroken(bRightEyeBroken, BreakEvent.Location);
-}
-
-void AWaxMonsterBase::NotifyEyeBroken(bool& bBrokenFlag, const FVector& WorldLocation)
-{
-	if (bBrokenFlag)
-	{
-		return;
-	}
-	bBrokenFlag = true;
-
-	if (MonsterData && MonsterData->EyeShatterSound && GetWorld())
-	{
-		UGameplayStatics::PlaySoundAtLocation(this, MonsterData->EyeShatterSound, WorldLocation, 0.85f, FMath::FRandRange(1.05f, 1.3f));
-	}
-
 	BP_OnEyeShattered(WorldLocation);
 }
 
-void AWaxMonsterBase::HandleWaxImpactApplied(FVector WorldImpactPoint)
+void AWaxMonsterBase::StartHitSlowdown()
 {
-	if (MonsterState != EWaxMonsterState::Active || !bEnableHitSlowdown || HitSlowdownDuration <= 0.0f)
+	const UWaxMonsterDataAsset& Data = GetMonsterData();
+	if (MonsterState != EWaxMonsterState::Active || !Data.bEnableHitSlowdown || Data.HitSlowdownDuration <= 0.0f)
 	{
 		return;
 	}
 
-	HitSlowdownRemaining = HitSlowdownDuration;
+	HitSlowdownRemaining = Data.HitSlowdownDuration;
 	if (ActiveLocomotion)
 	{
-		ActiveLocomotion->SetSpeedMultiplier(HitSlowdownSpeedMultiplier);
+		ActiveLocomotion->SetSpeedMultiplier(Data.HitSlowdownSpeedMultiplier);
 	}
 }
 
@@ -415,7 +348,7 @@ void AWaxMonsterBase::UpdateMonsterMovement(float DeltaTime)
 	FVector ToPlayer = PlayerPawn->GetActorLocation() - GetActorLocation();
 	ToPlayer.Z = 0.0f;
 	const float Dist = ToPlayer.Size();
-	if (Dist > StopDistanceToPlayer && Dist > KINDA_SMALL_NUMBER)
+	if (Dist > GetMonsterData().StopDistanceToPlayer && Dist > KINDA_SMALL_NUMBER)
 	{
 		ActiveLocomotion->SetDesiredMoveDirection(ToPlayer / Dist);
 	}
@@ -423,41 +356,6 @@ void AWaxMonsterBase::UpdateMonsterMovement(float DeltaTime)
 	{
 		ActiveLocomotion->SetDesiredMoveDirection(FVector::ZeroVector);
 	}
-}
-
-void AWaxMonsterBase::DropEyeWithChaos(UGeometryCollectionComponent* EyeGC, bool bAlreadyBroken, const FVector& PopVelocity)
-{
-	if (!EyeGC || !EyeGC->IsVisible())
-	{
-		return;
-	}
-
-	EnsureEyeFieldNodes();
-
-	EyeGC->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
-	EyeGC->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
-
-	EyeDynamicStateField->SetUniformInteger(static_cast<int32>(EObjectStateTypeEnum::Chaos_Object_Dynamic));
-	EyeGC->ApplyPhysicsField(true, EGeometryCollectionPhysicsTypeEnum::Chaos_DynamicState, nullptr, EyeDynamicStateField);
-
-	if (!bAlreadyBroken && !PopVelocity.IsNearlyZero())
-	{
-		EyeVelocityField->SetUniformVector(PopVelocity.Size(), PopVelocity.GetSafeNormal());
-		EyeGC->ApplyPhysicsField(true, EGeometryCollectionPhysicsTypeEnum::Chaos_LinearVelocity, nullptr, EyeVelocityField);
-	}
-}
-
-void AWaxMonsterBase::ShatterRemainingEye(UGeometryCollectionComponent* EyeGC, bool& bBrokenFlag)
-{
-	if (!EyeGC || !EyeGC->IsVisible() || bBrokenFlag)
-	{
-		return;
-	}
-
-	EnsureEyeFieldNodes();
-	const float ShatterStrain = (MonsterData ? MonsterData->EyeDamageThreshold : 180000.0f) * 2.5f;
-	EyeUniformStrainField->SetUniformScalar(ShatterStrain);
-	EyeGC->ApplyPhysicsField(true, EGeometryCollectionPhysicsTypeEnum::Chaos_ExternalClusterStrain, nullptr, EyeUniformStrainField);
 }
 
 void AWaxMonsterBase::HandleWaxCollapsed(AActor* CollapsedActor)
@@ -491,7 +389,6 @@ void AWaxMonsterBase::HandleWaxCollapsed(AActor* CollapsedActor)
 	{
 		HorizontalFwd = GetActorForwardVector().GetSafeNormal2D();
 	}
-	const FVector HorizontalRight = FVector::CrossProduct(FVector::UpVector, HorizontalFwd).GetSafeNormal();
 
 	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
 	{
@@ -514,17 +411,28 @@ void AWaxMonsterBase::HandleWaxCollapsed(AActor* CollapsedActor)
 
 	SetActorTickEnabled(false);
 
-	DropEyeWithChaos(EyeLeftGC, bLeftEyeBroken, HorizontalFwd * 110.0f - HorizontalRight * 75.0f + FVector(0.0f, 0.0f, 95.0f));
-	DropEyeWithChaos(EyeRightGC, bRightEyeBroken, HorizontalFwd * 110.0f + HorizontalRight * 75.0f + FVector(0.0f, 0.0f, 95.0f));
-
-	if (GetWorld() && (!bLeftEyeBroken || !bRightEyeBroken))
+	bool bAnyEyeIntact = false;
+	for (UWaxBreakablePartComponent* EyePart : { EyeLeftPart.Get(), EyeRightPart.Get() })
 	{
-		const float EyeTimeout = MonsterData ? MonsterData->EyeDropTimeoutSec : 0.55f;
+		if (EyePart)
+		{
+			EyePart->DetachWhole(EyePart->ComputeDetachPopVelocity(HorizontalFwd));
+			bAnyEyeIntact |= !EyePart->IsBroken();
+		}
+	}
+
+	if (GetWorld() && bAnyEyeIntact)
+	{
 		GetWorld()->GetTimerManager().SetTimer(EyeTimeoutHandle, [this]()
 		{
-			ShatterRemainingEye(EyeLeftGC, bLeftEyeBroken);
-			ShatterRemainingEye(EyeRightGC, bRightEyeBroken);
-		}, EyeTimeout, false);
+			for (UWaxBreakablePartComponent* EyePart : { EyeLeftPart.Get(), EyeRightPart.Get() })
+			{
+				if (EyePart)
+				{
+					EyePart->ShatterWhole();
+				}
+			}
+		}, FMath::Max(0.01f, GetMonsterData().EyePart.DetachShatterDelaySec), false);
 	}
 
 	AWaxMonsterCore* SpawnedCore = nullptr;
@@ -544,6 +452,5 @@ void AWaxMonsterBase::HandleWaxCollapsed(AActor* CollapsedActor)
 
 	BP_OnWaxCollapsed(SpawnedCore);
 
-	const float LifeSpan = MonsterData ? MonsterData->DebrisLifeSpanAfterCollapse : 5.5f;
-	SetLifeSpan(LifeSpan);
+	SetLifeSpan(GetMonsterData().DebrisLifeSpanAfterCollapse);
 }

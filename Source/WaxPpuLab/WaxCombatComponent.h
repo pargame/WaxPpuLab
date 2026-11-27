@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "WaxCombatTypes.h"
+#include "WaxHittable.h"
 #include "WaxCombatComponent.generated.h"
 
 class ACharacter;
@@ -10,7 +11,6 @@ class UAnimInstance;
 class UAnimMontage;
 class UMaterialParameterCollection;
 class USkeletalMeshComponent;
-class AWaxMonsterBase;
 class UWaxAttackSetDataAsset;
 struct FAnimNotifyEventReference;
 
@@ -157,10 +157,9 @@ private:
 	void OnMontageBlendingOut(UAnimMontage* Montage, bool bInterrupted, int32 Serial);
 
 	FVector ComputeHitCenter(EWaxHitSource Source, FName BoneName, float ForwardOffset, bool& bOutValid) const;
-	int32 ApplyImpact(const FVector& Center, float Strain, float Radius);
-	bool ApplyKnockback(AWaxMonsterBase* Monster) const;
+	/** 타격 구 안의 피격 대상에 공통 페이로드 전달. 영향받은 대상 수 반환 */
+	int32 DeliverHit(const FWaxHitPayload& Payload);
 	int32 ApplyDebrisImpulse(const FVector& Center) const;
-	int32 LastKnockbackCount = 0;
 	void SetMarkerVisible(bool bVisible, const FVector& Center = FVector::ZeroVector, float Radius = 0.0f);
 
 	void UpdateRotation(float DeltaTime);

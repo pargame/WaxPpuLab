@@ -2,18 +2,14 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
-#include "Chaos/ChaosGameplayEventDispatcher.h"
+#include "WaxHittable.h"
 #include "WaxMonsterBase.generated.h"
 
 class AWaxMonsterCore;
-class UCullingField;
 class UGeometryCollectionComponent;
-class URadialFalloff;
 class USceneComponent;
 class UStaticMeshComponent;
-class UUniformInteger;
-class UUniformScalar;
-class UUniformVector;
+class UWaxBreakablePartComponent;
 class UWaxDestructibleComponent;
 class UWaxLocomotionComponent;
 class UWaxMonsterDataAsset;
@@ -26,7 +22,7 @@ enum class EWaxMonsterState : uint8
 };
 
 UCLASS()
-class WAXPPULAB_API AWaxMonsterBase : public ACharacter
+class WAXPPULAB_API AWaxMonsterBase : public ACharacter, public IWaxHittable
 {
 	GENERATED_BODY()
 
@@ -39,19 +35,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "WaxMonster")
 	void InitializeFromData(UWaxMonsterDataAsset* InData);
 
-	/** 몬스터 피격 단일 진입점. 눈알과 몸체(WaxDestructible)로 충격을 분배한다. */
-	UFUNCTION(BlueprintCallable, Category = "WaxMonster")
-	void ReceiveWaxImpact(const FVector& WorldImpactPoint, float BaseStrain, float Radius);
-
-	/** 넉백: 속도(cm/s)로 밀어내고 DurationSec 동안 로코모션을 멈춰 이동이 넉백을 상쇄하지 않게 한다 */
-	UFUNCTION(BlueprintCallable, Category = "WaxMonster")
-	void ReceiveKnockback(const FVector& Velocity, float DurationSec);
-
-	UFUNCTION(BlueprintCallable, Category = "WaxMonster|Eyes")
-	void ApplyEyeImpact(const FVector& WorldImpactPoint, float BaseStrain, float Radius);
+	/** 몬스터 피격 단일 진입점: 눈 → 껍질 → 넉백 순서로 처리 */
+	virtual bool ReceiveHit_Implementation(const FWaxHitPayload& Payload) override;
 
 	UFUNCTION(BlueprintPure, Category = "WaxMonster|Eyes")
 	int32 GetIntactEyeCount() const;
+
+	/** 몬스터 튜닝 값의 단일 출처. 데이터 에셋이 없으면 클래스 기본값 */
+	const UWaxMonsterDataAsset& GetMonsterData() const;
 
 	UFUNCTION(BlueprintPure, Category = "WaxMonster")
 	EWaxMonsterState GetMonsterState() const { return MonsterState; }
@@ -74,31 +65,17 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "WaxMonster")
 	TObjectPtr<UWaxDestructibleComponent> WaxDestructible;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "WaxMonster")
+	TObjectPtr<UWaxBreakablePartComponent> EyeLeftPart;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "WaxMonster")
+	TObjectPtr<UWaxBreakablePartComponent> EyeRightPart;
+
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxMonster")
 	TObjectPtr<UWaxLocomotionComponent> ActiveLocomotion;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WaxMonster")
 	TObjectPtr<UWaxMonsterDataAsset> MonsterData;
-
-	/** MonsterData에서 복사한 런타임 값 */
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxMonster|Movement")
-	bool bChasePlayer = true;
-
-	/** MonsterData에서 복사한 런타임 값 */
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxMonster|Movement")
-	float StopDistanceToPlayer = 150.0f;
-
-	/** MonsterData에서 복사한 런타임 값 */
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxMonster|HitStop")
-	bool bEnableHitSlowdown = true;
-
-	/** MonsterData에서 복사한 런타임 값 */
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxMonster|HitStop")
-	float HitSlowdownDuration = 0.15f;
-
-	/** MonsterData에서 복사한 런타임 값 */
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "WaxMonster|HitStop")
-	float HitSlowdownSpeedMultiplier = 0.30f;
 
 protected:
 	virtual void UpdateMonsterMovement(float DeltaTime);
@@ -111,48 +88,21 @@ protected:
 
 private:
 	UFUNCTION()
-	void HandleWaxImpactApplied(FVector WorldImpactPoint);
-
-	UFUNCTION()
 	void HandleWaxCollapsed(AActor* CollapsedActor);
 
 	UFUNCTION()
-	void HandleLeftEyeBreak(const FChaosBreakEvent& BreakEvent);
+	void HandleEyeBroken(UWaxBreakablePartComponent* Part, FVector WorldLocation);
 
-	UFUNCTION()
-	void HandleRightEyeBreak(const FChaosBreakEvent& BreakEvent);
-
-	void EnsureEyeFieldNodes();
 	void EnsureLocomotionComponent();
-	void ConfigureEyeCollection(UGeometryCollectionComponent* EyeGC, const FVector& RelativeLoc);
-	void ApplyImpactToSingleEye(UGeometryCollectionComponent* EyeGC, bool& bBrokenFlag, float& AccumulatedDamage, const FVector& WorldImpactPoint, float BaseStrain, float Radius);
-	void DropEyeWithChaos(UGeometryCollectionComponent* EyeGC, bool bAlreadyBroken, const FVector& PopVelocity);
-	void ShatterRemainingEye(UGeometryCollectionComponent* EyeGC, bool& bBrokenFlag);
-	void NotifyEyeBroken(bool& bBrokenFlag, const FVector& WorldLocation);
-
-	UPROPERTY(Transient)
-	TObjectPtr<URadialFalloff> EyeMaskFalloff = nullptr;
-
-	UPROPERTY(Transient)
-	TObjectPtr<URadialFalloff> EyeStrainFalloff = nullptr;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UUniformInteger> EyeDynamicStateField = nullptr;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UCullingField> EyeLocalDynamicField = nullptr;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UUniformScalar> EyeUniformStrainField = nullptr;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UUniformVector> EyeVelocityField = nullptr;
+	void ConfigureEye(UGeometryCollectionComponent* EyeGC, UWaxBreakablePartComponent* EyePart, float LateralSign);
+	void StartHitSlowdown();
+	void ApplyKnockbackNow(const FVector& Velocity, float DurationSec);
 
 	EWaxMonsterState MonsterState = EWaxMonsterState::Active;
 	FTimerHandle EyeTimeoutHandle;
 	float HitSlowdownRemaining = 0.0f;
-	float LeftEyeDamage = 0.0f;
-	float RightEyeDamage = 0.0f;
-	bool bLeftEyeBroken = false;
-	bool bRightEyeBroken = false;
+	FVector PendingKnockbackVelocity = FVector::ZeroVector;
+	float PendingKnockbackDuration = 0.0f;
+	uint64 PendingKnockbackFrame = 0;
+	bool bHasPendingKnockback = false;
 };

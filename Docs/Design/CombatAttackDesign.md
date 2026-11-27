@@ -200,6 +200,15 @@ Montage ─ UWaxAttackHitNotify    (UWaxPunchAnimNotify 일반화, CoreRedirect�
 - 주의: Python으로 BP 클래스 CDO만 바꾸면 PIE 스폰 인스턴스에 반영되지 않음 → `BlueprintEditorLibrary.compile_blueprint` 후 저장해야 함(KickAction 누락 원인).
 - DA 초기값(H3로 튜닝): PlayRate 1.3, StrainScale 0.5, RadiusScale 1.3, 넉백 수평 900 / 수직 250cm/s, 정지 0.6s, 파편 600 / 위 200cm/s, 반경 160. 회전 Active Yaw 0·감도 0.3, 이동 0.2 / 0 / 0.3, 점프 불가.
 
+## 9.1 구현 메모 (피격 공통화·파괴 부위 계층)
+- 문제: 발차기 넉백 시 껍질이 한 덩어리로 몸에서 빠지고 눈·코어만 밀림. 원인은 Chaos가 깨질 때 만드는 남은 internal cluster가 자식 상태(Dynamic)를 따라 Dynamic이 되어 몸을 안 따라가는 것. 펀치는 넉백이 없어 드러나지 않았음.
+- 피격 공통화: `FWaxHitPayload` + `IWaxHittable::ReceiveHit`(BlueprintNativeEvent). 넉백 벡터는 대상별로 계산(`ComputeKnockbackVelocity`, 공격자→대상 수평).
+- 부위 계층: `UWaxBreakablePartComponent`(공통) ← `UWaxDestructibleComponent`(껍질 전용: 경도 존·오디오·붕괴). 눈은 공통 컴포넌트 인스턴스 2개. 규칙은 DA의 `ShellPart`/`EyePart`(`FWaxBreakablePartSettings`).
+- 껍질 유지 방식: 깨진 다음 프레임부터 `ReanchorWindowSec` 동안 물리 스레드에서 가장 큰 활성 클러스터를 Kinematic으로 되돌림. 넉백은 `KnockbackDelayFrames`(기본 2)만큼 늦춰 재고정 뒤 밀리게 함.
+- 기각: 모든 조각 앵커(`SetAnchoredByBox`) 방식. 깨진 조각도 앵커 때문에 제자리에 굳어 "무반응 → 붕괴 시 한꺼번에 날아감"이 생겼고, 앵커를 사후에 풀면 조각·액터 속도가 폭주(좌표 1e22, 월드 밖 제거)함.
+- 파괴 임계값은 물리 상태 생성 시 반영되므로 `SetRestCollection` 전에 설정해야 함(부위 공통 컴포넌트가 담당).
+- 깨진 조각 제거 타이밍은 GC Dataflow `RemoveOnBreak`가 원본. 코드에서 중복 구현하지 않음.
+
 ## 10. 리스크
 
 - **FirstPersonScale 0.6**: 다리가 보이면 카메라 쪽으로 축소·왜곡될 수 있음 → H0 결과에 따라 하체 HideBone 또는 FP 스케일 예외 처리 검토.
