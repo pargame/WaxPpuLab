@@ -38,7 +38,7 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR �
 - `UWaxCombatComponent` (캐릭터 기본 서브오브젝트, 수치는 `DA_AttackSet_Unarmed`):
   - 단일 슬롯 입력 버퍼(최신 우선, 만료·재검증), 홀드 연타 상태 폴백, `Idle → Windup → Active → Recovery` 단계 FSM
   - 몸체 메시 본 기준 구 오버랩 타격(공격 1회당 대상 중복 제거), `MPC_WaxTargeting` 빨강 표면 마커
-  - 타격마다 `FWaxHitPayload`(공격자 위치·타격 중심·조준 방향·반경·세기·넉백 수평/수직/시간)를 한 번 만들어 `IWaxHittable::ReceiveHit`으로 전달합니다. 액터가 인터페이스를 구현하면(몬스터) 액터에, 아니면 피격 가능한 컴포넌트에 직접 전달합니다.
+  - 타격마다 `FWaxHitPayload`(공격자 위치·타격 중심·조준 방향·반경·세기·넉백 수평/수직/시간)를 한 번 만들어 `IWaxHittable::ReceiveWaxHit`으로 전달합니다. 액터가 인터페이스를 구현하면(몬스터) 액터에, 아니면 피격 가능한 컴포넌트에 직접 전달합니다.
   - 공격 단계별 회전 제한(몸 Yaw 속도, 몸-카메라 오프셋 소프트 클램프, 감도)과 방향별 이동 속도 배율·점프 허용
   - BP 이벤트: `OnAttackStarted`, `OnAttackPhaseChanged`, `OnAttackHit`, `OnAttackEnded`, `OnBufferConsumed`
   - 로그 `LogWaxCombat`(공격·버퍼·타격, `WaxRot Session` 회전·이동 통계)
@@ -47,7 +47,7 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR �
 
 ### 2. 몬스터 계층 (`AWaxMonsterBase`)
 - **평탄 1단계 상속**: `AWaxMonsterBase`(`ACharacter`) → 직계 블루프린트 자식(`BP_WaxBall_Basic`, `BP_WaxButter`)만 사용합니다.
-- **피격**: `IWaxHittable` 구현체. `ReceiveHit` 하나에서 눈 → 껍질 → 넉백 순서로 처리하고, 넉백은 `KnockbackDelayFrames`만큼 늦춰 깨진 껍질이 몸에 다시 고정된 뒤 밀리게 합니다.
+- **피격**: `IWaxHittable` 구현체. `ReceiveWaxHit` 하나에서 눈 → 껍질 → 넉백 순서로 처리하고, 넉백은 `KnockbackDelayFrames`만큼 늦춰 깨진 껍질이 몸에 다시 고정된 뒤 밀리게 합니다.
 - **공통 컴포넌트**:
   - `BodyPivot`: 껍질·코어·눈알이 함께 부착되는 중심 피벗.
   - `ShellCollection` / `EyeLeftGC` / `EyeRightGC` (`UGeometryCollectionComponent`): Chaos 파괴 부위. 생성 기본값은 한 곳(`CreateBreakableCollection`)에서 공유합니다.

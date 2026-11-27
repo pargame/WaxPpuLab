@@ -153,7 +153,7 @@ void UWaxBreakablePartComponent::EnsureFieldNodes()
 	}
 }
 
-bool UWaxBreakablePartComponent::ReceiveHit_Implementation(const FWaxHitPayload& Payload)
+bool UWaxBreakablePartComponent::ReceiveWaxHit_Implementation(const FWaxHitPayload& Payload)
 {
 	return ApplyImpact(Payload.Center, Payload.Strain, Payload.Radius);
 }

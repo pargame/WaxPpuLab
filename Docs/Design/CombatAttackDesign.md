@@ -202,10 +202,11 @@ Montage ─ UWaxAttackHitNotify    (UWaxPunchAnimNotify 일반화, CoreRedirect�
 
 ## 9.1 구현 메모 (피격 공통화·파괴 부위 계층)
 - 문제: 발차기 넉백 시 껍질이 한 덩어리로 몸에서 빠지고 눈·코어만 밀림. 원인은 Chaos가 깨질 때 만드는 남은 internal cluster가 자식 상태(Dynamic)를 따라 Dynamic이 되어 몸을 안 따라가는 것. 펀치는 넉백이 없어 드러나지 않았음.
-- 피격 공통화: `FWaxHitPayload` + `IWaxHittable::ReceiveHit`(BlueprintNativeEvent). 넉백 벡터는 대상별로 계산(`ComputeKnockbackVelocity`, 공격자→대상 수평).
+- 피격 공통화: `FWaxHitPayload` + `IWaxHittable::ReceiveWaxHit`(BlueprintNativeEvent). 넉백 벡터는 대상별로 계산(`ComputeKnockbackVelocity`, 공격자→대상 수평).
 - 부위 계층: `UWaxBreakablePartComponent`(공통) ← `UWaxDestructibleComponent`(껍질 전용: 경도 존·오디오·붕괴). 눈은 공통 컴포넌트 인스턴스 2개. 규칙은 DA의 `ShellPart`/`EyePart`(`FWaxBreakablePartSettings`).
 - 껍질 유지 방식(11/27 개정): 타격은 Strain 필드만 가함. 기존의 "반경 내 Dynamic 전환" 필드는 반경이 큰 발차기에서 본체(루트·남은 덩어리)까지 Dynamic으로 만들어, 본체가 몸 추종을 잃고(눈·코어만 밀려 보임) 그 사이 RemoveOnBreak 타이머가 흘러 본체가 통째로 크럼블·소멸하는 원인이었음. 이제 Kinematic은 본체 하나만 허용하고 나머지 활성 조각(낱개 포함)은 매 틱 물리 스레드에서 Dynamic으로 바꿈(기존 재고정은 낱개 조각을 건너뛰어 공중 부양이 생겼음). Kinematic 덩어리가 없을 때만 가장 큰 덩어리를 다시 고정. 넉백은 `KnockbackDelayFrames`(기본 2)만큼 늦춰, 막 풀려난 조각이 Dynamic이 된 뒤 밀리게 함.
 - 기각: 모든 조각 앵커(`SetAnchoredByBox`) 방식. 깨진 조각도 앵커 때문에 제자리에 굳어 "무반응 → 붕괴 시 한꺼번에 날아감"이 생겼고, 앵커를 사후에 풀면 조각·액터 속도가 폭주(좌표 1e22, 월드 밖 제거)함.
+- 피격 함수 이름은 `ReceiveWaxHit`. `ReceiveHit`으로 지으면 `AActor::ReceiveHit`(Event Hit)과 겹쳐 물리 충돌 알림이 쓰레기 페이로드로 들어오고, 비정상 넉백으로 몬스터가 좌표 1e15까지 날아가 월드 밖에서 제거됨(11/27 발차기 시 뒤 볼 소멸·DoubleFloat Ensure 원인).
 - 파괴 임계값은 물리 상태 생성 시 반영되므로 `SetRestCollection` 전에 설정해야 함(부위 공통 컴포넌트가 담당).
 - 조각 제거: 엔진 `RemoveOnBreak`(축소 제거)를 그대로 쓰고 시간 값만 DA(`FragmentLifeSecRange`/`FragmentShrinkSecRange`/`ClusterCrumbleDelaySec`)로 GC 동적 속성에 덮어씀(같은 시드로 매 틱 멱등 기록 — 엔진의 지연 초기화 시점과 무관). 덩어리는 크럼블로 낱개화해 조각마다 따로 수명이 흐름. 눈의 `DetachedLifeSpanSec`(통째 숨김)는 제거하고 같은 규칙으로 통일.
 

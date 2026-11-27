@@ -38,7 +38,7 @@ public:
 	/** 부위 초기화. RestAsset 지정 전에 파괴 임계값을 적용함. Settings는 데이터 에셋 안의 구조체를 직접 가리킴(복사하지 않음). LateralSign은 몸 기준 바깥 옆 방향(-1 왼쪽, +1 오른쪽) */
 	void InitializePart(UGeometryCollectionComponent* InCollection, UGeometryCollection* RestAsset, const FWaxBreakablePartSettings* InSettings, UObject* InSettingsOwner, float InLateralSign = 0.0f);
 
-	virtual bool ReceiveHit_Implementation(const FWaxHitPayload& Payload) override;
+	virtual bool ReceiveWaxHit_Implementation(const FWaxHitPayload& Payload) override;
 
 	/** 타격 구로 부위를 깸. 실제로 영향을 받았으면 true */
 	virtual bool ApplyImpact(const FVector& WorldImpactPoint, float Strain, float Radius);

@@ -68,7 +68,7 @@ class WAXPPULAB_API IWaxHittable
 	GENERATED_BODY()
 
 public:
-	/** 타격 적용. 실제로 영향을 받았으면 true. 호출은 IWaxHittable::Execute_ReceiveHit 사용 */
+	/** 타격 적용. 실제로 영향을 받았으면 true. 호출은 IWaxHittable::Execute_ReceiveWaxHit 사용. AActor::ReceiveHit(물리 충돌 이벤트)와 이름이 겹치면 충돌 알림이 이 함수로 잘못 들어오므로 이름을 바꾸지 말 것 */
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "WaxHit")
-	bool ReceiveHit(const FWaxHitPayload& Payload);
+	bool ReceiveWaxHit(const FWaxHitPayload& Payload);
 };

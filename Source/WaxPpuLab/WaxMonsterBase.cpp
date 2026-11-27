@@ -266,7 +266,7 @@ void AWaxMonsterBase::Tick(float DeltaTime)
 	}
 }
 
-bool AWaxMonsterBase::ReceiveHit_Implementation(const FWaxHitPayload& Payload)
+bool AWaxMonsterBase::ReceiveWaxHit_Implementation(const FWaxHitPayload& Payload)
 {
 	if (MonsterState != EWaxMonsterState::Active)
 	{
@@ -283,13 +283,13 @@ bool AWaxMonsterBase::ReceiveHit_Implementation(const FWaxHitPayload& Payload)
 	{
 		if (EyePart)
 		{
-			IWaxHittable::Execute_ReceiveHit(EyePart, Payload);
+			IWaxHittable::Execute_ReceiveWaxHit(EyePart, Payload);
 		}
 	}
 
 	if (WaxDestructible && !WaxDestructible->HasCollapsed())
 	{
-		IWaxHittable::Execute_ReceiveHit(WaxDestructible, Payload);
+		IWaxHittable::Execute_ReceiveWaxHit(WaxDestructible, Payload);
 	}
 
 	StartHitSlowdown();

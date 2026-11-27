@@ -39,7 +39,7 @@ public:
 	void InitializeFromData(UWaxMonsterDataAsset* InData);
 
 	/** 몬스터 피격 단일 진입점: 눈 → 껍질 → 넉백 순서로 처리 */
-	virtual bool ReceiveHit_Implementation(const FWaxHitPayload& Payload) override;
+	virtual bool ReceiveWaxHit_Implementation(const FWaxHitPayload& Payload) override;
 
 	UFUNCTION(BlueprintPure, Category = "WaxMonster|Eyes")
 	int32 GetIntactEyeCount() const;

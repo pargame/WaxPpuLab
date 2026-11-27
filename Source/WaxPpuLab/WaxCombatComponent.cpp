@@ -570,7 +570,7 @@ int32 UWaxCombatComponent::DeliverHit(const FWaxHitPayload& Payload)
 		bool bHit = false;
 		if (HitActor->Implements<UWaxHittable>())
 		{
-			bHit = IWaxHittable::Execute_ReceiveHit(HitActor, Payload);
+			bHit = IWaxHittable::Execute_ReceiveWaxHit(HitActor, Payload);
 		}
 		else
 		{
@@ -579,7 +579,7 @@ int32 UWaxCombatComponent::DeliverHit(const FWaxHitPayload& Payload)
 			{
 				if (Component && Component->Implements<UWaxHittable>())
 				{
-					bHit |= IWaxHittable::Execute_ReceiveHit(Component, Payload);
+					bHit |= IWaxHittable::Execute_ReceiveWaxHit(Component, Payload);
 				}
 			}
 		}
