@@ -351,10 +351,14 @@ void UWaxButterLocomotionComponent::ChooseLayDirection()
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(WaxButterLaySweep), false, OwnerMonster);
 	const FCollisionShape Shape = FCollisionShape::MakeSphere(FMath::Min(HalfX, HalfY) * 0.8f);
 
+	// 파괴 조각(PhysicsBody)은 몬스터 이동을 막지 않으므로 눕는 방향 판단에서도 무시. 다른 몬스터는 캡슐(Pawn)로 감지됨
+	FCollisionResponseParams ResponseParams;
+	ResponseParams.CollisionResponse.SetResponse(ECC_PhysicsBody, ECR_Ignore);
+
 	FHitResult HitLeft, HitRight;
 	// LaySign = +1 falls toward -Right (left), LaySign = -1 falls toward +Right (right)
-	const bool bLeftBlocked = GetWorld()->SweepSingleByChannel(HitLeft, Origin, Origin - Right * SweepDist, FQuat::Identity, ECC_WorldDynamic, Shape, Params);
-	const bool bRightBlocked = GetWorld()->SweepSingleByChannel(HitRight, Origin, Origin + Right * SweepDist, FQuat::Identity, ECC_WorldDynamic, Shape, Params);
+	const bool bLeftBlocked = GetWorld()->SweepSingleByChannel(HitLeft, Origin, Origin - Right * SweepDist, FQuat::Identity, ECC_WorldDynamic, Shape, Params, ResponseParams);
+	const bool bRightBlocked = GetWorld()->SweepSingleByChannel(HitRight, Origin, Origin + Right * SweepDist, FQuat::Identity, ECC_WorldDynamic, Shape, Params, ResponseParams);
 
 	if (bLeftBlocked && !bRightBlocked)
 	{

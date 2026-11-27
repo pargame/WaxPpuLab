@@ -110,6 +110,7 @@ private:
 	void ExtendLooseRule();
 	void EnforceAnchorRule();
 	void SyncFragmentRemovalTimers();
+	void ApplyLooseFragmentProfile();
 	void PlayPartSound(USoundBase* Sound, const FVector& Location, float Volume, const FVector2D& PitchRange) const;
 
 	UPROPERTY(Transient)
@@ -138,6 +139,9 @@ private:
 	/** 떼어 냄·전체 붕괴 이후 Kinematic 정리 규칙을 계속 적용할 마감 시각 (모든 조각 수명이 끝날 때까지) */
 	float LooseRuleUntil = -1.0f;
 	int32 RemovalSeed = 0;
+	/** 떨어진 조각 충돌 프로필을 적용한 조각 수 (새 조각이 생겼을 때만 다시 적용) */
+	int32 LooseProfileAppliedCount = 0;
+	bool bWarnedMissingLooseProfile = false;
 	float LateralSign = 0.0f;
 	int32 HitCount = 0;
 	bool bBroken = false;

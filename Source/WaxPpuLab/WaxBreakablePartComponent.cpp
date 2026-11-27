@@ -1,6 +1,7 @@
 #include "WaxBreakablePartComponent.h"
 
 #include "Chaos/PBDRigidsEvolutionGBF.h"
+#include "Engine/CollisionProfile.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
 #include "Field/FieldSystemObjects.h"
@@ -61,6 +62,7 @@ void UWaxBreakablePartComponent::InitializePart(UGeometryCollectionComponent* In
 	LateralSign = InLateralSign;
 
 	BrokenLeafIndices.Reset();
+	LooseProfileAppliedCount = 0;
 	LooseRuleUntil = -1.0f;
 	RemovalSeed = static_cast<int32>(GetUniqueID());
 	HitCount = 0;
@@ -243,8 +245,12 @@ void UWaxBreakablePartComponent::EnforceAnchorRule()
 		return;
 	}
 
-	const bool bKeepBody = GetPartSettings().BreakMode == EWaxBreakMode::ChipAndRetainBody && !bDetached && !bReleased;
-	Solver->EnqueueCommandImmediate([Proxy, Solver, bKeepBody]()
+	const FWaxBreakablePartSettings& S = GetPartSettings();
+	const bool bKeepBody = S.BreakMode == EWaxBreakMode::ChipAndRetainBody && !bDetached && !bReleased;
+	// 떨어진 조각 속도 상한. 엔진 적분 단계가 파티클별 MaxLinearSpeedSq/MaxAngularSpeedSq로 속도를 자름 (0 = 제한 없음)
+	const Chaos::FReal MaxLinearSpeedSq = S.FragmentMaxLinearSpeed > 0.0f ? FMath::Square(static_cast<Chaos::FReal>(S.FragmentMaxLinearSpeed)) : TNumericLimits<float>::Max();
+	const Chaos::FReal MaxAngularSpeedSq = S.FragmentMaxAngularSpeedDeg > 0.0f ? FMath::Square(static_cast<Chaos::FReal>(FMath::DegreesToRadians(S.FragmentMaxAngularSpeedDeg))) : TNumericLimits<float>::Max();
+	Solver->EnqueueCommandImmediate([Proxy, Solver, bKeepBody, MaxLinearSpeedSq, MaxAngularSpeedSq]()
 	{
 		Chaos::FPBDRigidsEvolution* Evolution = Solver->GetEvolution();
 		if (!Evolution)
@@ -315,12 +321,19 @@ void UWaxBreakablePartComponent::EnforceAnchorRule()
 
 		for (Chaos::FPBDRigidClusteredParticleHandle* Top : ActiveTops)
 		{
+			if (Top == Body)
+			{
+				continue;
+			}
 			// 엔진 필드와 같은 경로. 질량이 0인 파티클은 Dynamic으로 바꾸지 않음
-			if (Top != Body && Top->ObjectState() == Chaos::EObjectStateType::Kinematic
+			if (Top->ObjectState() == Chaos::EObjectStateType::Kinematic
 				&& Chaos::ReportDynamicStateResult(Solver, Chaos::EObjectStateType::Dynamic, Top, false, Chaos::FVec3(0), false, Chaos::FVec3(0)))
 			{
 				Evolution->SetParticleKinematicTarget(Top, Chaos::FKinematicTarget());
 			}
+			// 새로 떨어진 낱개·덩어리는 엔진 기본값(무제한)으로 생기므로 매번 상한을 다시 씀 (멱등)
+			Top->SetMaxLinearSpeedSq(MaxLinearSpeedSq);
+			Top->SetMaxAngularSpeedSq(MaxAngularSpeedSq);
 		}
 	});
 }
@@ -387,9 +400,41 @@ void UWaxBreakablePartComponent::TickComponent(float DeltaTime, ELevelTick TickT
 	{
 		EnforceAnchorRule();
 		SyncFragmentRemovalTimers();
+		ApplyLooseFragmentProfile();
 	}
 
 	RefreshTickEnabled();
+}
+
+void UWaxBreakablePartComponent::ApplyLooseFragmentProfile()
+{
+	// 떨어진 낱개 조각만 별도 충돌 프로필로 바꿈. 본체는 컴포넌트 설정(공격 판정용 Visibility 등)을 유지.
+	// 엔진 API가 게임 스레드 쿼리용과 물리 스레드 필터를 함께 갱신하고, 이후 컴포넌트 충돌 설정이 바뀌어도 다시 적용함
+	if (!Collection || BrokenLeafIndices.Num() == LooseProfileAppliedCount)
+	{
+		return;
+	}
+
+	const FName ProfileName = GetPartSettings().LooseFragmentCollisionProfile.Name;
+	if (ProfileName.IsNone())
+	{
+		return;
+	}
+
+	FCollisionResponseTemplate Template;
+	if (!UCollisionProfile::Get()->GetProfileTemplate(ProfileName, Template))
+	{
+		if (!bWarnedMissingLooseProfile)
+		{
+			bWarnedMissingLooseProfile = true;
+			UE_LOG(LogWaxBreakable, Warning, TEXT("%s: 충돌 프로필 %s가 없어 떨어진 조각 충돌을 바꾸지 않습니다 (Config/DefaultEngine.ini 확인)"),
+				*GetPathName(), *ProfileName.ToString());
+		}
+		return;
+	}
+
+	LooseProfileAppliedCount = BrokenLeafIndices.Num();
+	Collection->SetPerParticleCollisionProfileName(BrokenLeafIndices, ProfileName);
 }
 
 bool UWaxBreakablePartComponent::NeedsTick() const

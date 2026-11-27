@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/CollisionProfile.h"
 #include "WaxBreakableTypes.generated.h"
 
 class USoundBase;
@@ -80,6 +81,18 @@ struct FWaxBreakablePartSettings
 	/** 파편 걷어차기 검사 여유 거리 (cm). 부위 경계+반경 밖이라도 이 거리 안이면 적용 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debris", meta = (ClampMin = "0.0"))
 	float DebrisKickRangeMargin = 150.0f;
+
+	/** 떨어진 조각의 최대 이동 속도 (cm/s). 발차기·몬스터 몸에 밀려 튀는 속도를 이 값에서 자름. 낮추면 덜 날아감, 0이면 제한 없음 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debris", meta = (ClampMin = "0.0", Units = "CentimetersPerSecond"))
+	float FragmentMaxLinearSpeed = 1000.0f;
+
+	/** 떨어진 조각의 최대 회전 속도 (도/s). 낮추면 덜 팽이처럼 돌고 덜 굴러감, 0이면 제한 없음 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debris", meta = (ClampMin = "0.0", Units = "DegreesPerSecond"))
+	float FragmentMaxAngularSpeedDeg = 1440.0f;
+
+	/** 떨어진 조각에 적용할 충돌 프로필. 기본 WaxLooseFragment는 캐릭터(Pawn)와 Visibility 트레이스(발 IK·공격 판정)를 무시하고 조각끼리·바닥·벽과만 부딪힘. None이면 부위 컴포넌트 설정 그대로 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debris")
+	FCollisionProfileName LooseFragmentCollisionProfile = FCollisionProfileName(TEXT("WaxLooseFragment"));
 
 	/** 버티는 타격(아직 안 깨짐)에 재생할 소리. 비우면 무음 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio")

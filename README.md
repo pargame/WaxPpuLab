@@ -54,7 +54,7 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR �
   - `CoreMesh` + `AWaxMonsterCore`: 붕괴 시 탄성 물리(`PM_JellyBounce`)로 튀며 방출되는 코어 및 부활 루프.
 - **파괴 부위 계층**:
   - `UWaxBreakablePartComponent` (부위 공통): GC 하나의 타격(Strain 필드만) → 깨짐 → 처리 규칙 → 조각별 수명. 규칙은 `EWaxBreakMode`로 고릅니다.
-    - 공통 규칙: Kinematic(몸에 붙어 컴포넌트를 따라감)은 남은 본체 하나에만 허용하고, 나머지 활성 조각·덩어리는 매 틱 Dynamic으로 떨어뜨립니다. 떨어진 덩어리는 낱개로 흩어지고(크럼블), 낱개 조각은 엔진 `RemoveOnBreak`로 조각마다 수명 후 줄어들어 사라집니다.
+    - 공통 규칙: Kinematic(몸에 붙어 컴포넌트를 따라감)은 남은 본체 하나에만 허용하고, 나머지 활성 조각·덩어리는 매 틱 Dynamic으로 떨어뜨리며 최대 이동·회전 속도를 DA 값으로 제한합니다. 떨어진 낱개 조각은 `WaxLooseFragment` 충돌 프로필로 바꿔 캐릭터 이동·발 IK·공격 판정에 걸리지 않고 조각끼리·바닥·벽과만 부딪힙니다. 떨어진 덩어리는 낱개로 흩어지고(크럼블), 낱개 조각은 엔진 `RemoveOnBreak`로 조각마다 수명 후 줄어들어 사라집니다.
     - `ChipAndRetainBody` (껍질): 깨진 조각만 떨어지고 가장 큰 Kinematic 덩어리는 몸에 계속 붙습니다.
     - `DetachWholeOnBreak` (눈): 처음 깨지는 순간 부위 전체가 몸에서 떨어져 튀어나가고, 이후 조각은 같은 수명 규칙으로 사라집니다.
   - `UWaxDestructibleComponent` (껍질 전용, 위 계층 상속): 경도 존, 남은 비율 기반 전체 붕괴, 물리 기반 MetaSound 깨짐·충돌음.
@@ -108,6 +108,8 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR �
 | 펀치·발차기 타격 범위 | `DA_AttackSet_Unarmed` → `Settings.BaseImpactRadius` × 각 공격 `RadiusScale`, 위치는 `ForwardOffset` |
 | 밀림 세기·방향·시간 | `DA_AttackSet_Unarmed` → 각 공격 `KnockbackHorizontal` / `KnockbackVertical` / `KnockbackDurationSec` (방향은 공격자→대상 수평) |
 | 바닥 파편 걷어차기 | 공격: 각 공격 `DebrisImpulse*`, 이동: `DA_WaxPlayer` → `DebrisKick` |
+| 조각이 너무 멀리·빨리 튐 (발차기·몬스터 밀림) | 몬스터 DA → `ShellPart`/`EyePart` → `Debris.FragmentMaxLinearSpeed`(cm/s), `FragmentMaxAngularSpeedDeg`(도/s) |
+| 떨어진 조각의 충돌 관계 | 몬스터 DA → `ShellPart`/`EyePart` → `Debris.LooseFragmentCollisionProfile`(기본 `WaxLooseFragment`, `Config/DefaultEngine.ini`) |
 | 껍질이 얼마나 단단한가 | GC 에셋 `DamageThreshold`(1·2·3단계, 현재 250000/150000/50000) 또는 몬스터 DA `ShellPart.DamageThreshold`(0이면 에셋 값), 부위별 `HardnessZones` |
 | 눈이 얼마나 단단한가·탈락 연출 | 몬스터 DA → `Eyes.EyePart` |
 | 몇 % 깨지면 전체 붕괴 | 몬스터 DA → `Destruction.CollapseRemainingRatio` |
@@ -138,7 +140,7 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR �
 | **Break** | `BreakMode`, `HitsToBreak`, `DamageThreshold`, `SubLevelThresholdRatios` | 처리 규칙(껍질 `ChipAndRetainBody`, 눈 `DetachWholeOnBreak`), 깨지기 시작할 때까지 타격 수, 1단계 임계값(0이면 GC 에셋 값)과 2·3단계 비율 |
 | **Hit** | `HitAcceptRadius`, `MinImpactRadius`, `StrainEdgeRatio` | 타격 판정 여유 거리(0이면 검사 안 함), 이 부위에 적용되는 최소 타격 반경, 가장자리 세기 비율 |
 | **Lifecycle** | `FragmentLifeSecRange`, `FragmentShrinkSecRange`, `ClusterCrumbleDelaySec`, `DetachPopVelocity`, `DetachShatterDelaySec`, `ShatterStrainScale` | 조각이 깨진 순간부터 유지되는 시간과 줄어드는 시간(조각마다 범위 내 무작위), 떨어진 덩어리가 낱개로 흩어지기까지 시간(껍질 0, 눈 1.0 — 붕괴 탈락 눈이 통째로 떨어진 뒤 부서지도록), 탈락 시 튀는 속도(앞·바깥 옆·위), 붕괴로 탈락한 부위가 산산조각 나기까지 시간과 세기 배율 |
-| **Debris** | `DebrisKickEdgeRatio`, `DebrisKickRangeMargin` | 파편 걷어차기 가장자리 비율, 검사 여유 거리 |
+| **Debris** | `DebrisKickEdgeRatio`, `DebrisKickRangeMargin`, `FragmentMaxLinearSpeed`, `FragmentMaxAngularSpeedDeg`, `LooseFragmentCollisionProfile` | 파편 걷어차기 가장자리 비율, 검사 여유 거리, 떨어진 조각 최대 이동 속도(기본 1000cm/s)·회전 속도(기본 1440도/s, 0이면 제한 없음), 떨어진 조각 충돌 프로필(캐릭터·Visibility 무시) |
 | **Audio** | `HitSound`, `HitSoundVolume`, `HitSoundPitchRange`, `BreakSound`, `BreakSoundVolume`, `BreakSoundPitchRange` | 버틴 타격음·깨짐음(눈에서 사용, 껍질은 `DestructionAudio` 합성음 사용) |
 
 > **왁스버터(`DA_WaxButter`) 주의사항**

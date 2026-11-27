@@ -210,6 +210,12 @@ Montage ─ UWaxAttackHitNotify    (UWaxPunchAnimNotify 일반화, CoreRedirect�
 - 파괴 임계값은 물리 상태 생성 시 반영되므로 `SetRestCollection` 전에 설정해야 함(부위 공통 컴포넌트가 담당).
 - 조각 제거: 엔진 `RemoveOnBreak`(축소 제거)를 그대로 쓰고 시간 값만 DA(`FragmentLifeSecRange`/`FragmentShrinkSecRange`/`ClusterCrumbleDelaySec`)로 GC 동적 속성에 덮어씀(같은 시드로 매 틱 멱등 기록 — 엔진의 지연 초기화 시점과 무관). 덩어리는 크럼블로 낱개화해 조각마다 따로 수명이 흐름. 눈의 `DetachedLifeSpanSec`(통째 숨김)는 제거하고 같은 규칙으로 통일.
 
+## 9.2 구현 메모 (조각 충돌 관계·속도 제한)
+- 문제: 플레이어가 바닥 조각을 밟으면 들썩임. 파괴 부위 GC는 이미 `ECC_Pawn`을 무시해 캡슐 이동(CMC 스윕)과 물리 접촉은 없었음. 원인은 ABP의 `CR_Mannequin_FootIK`가 `TraceTypeQuery1`(Visibility) 구 트레이스로 발 위치를 잡는데 조각(PhysicsActor 프로필)이 Visibility를 막아 골반·머리가 오르내리고, 1인칭 카메라가 머리를 따라간 것.
+- 해결: 떨어진 낱개 조각(`BrokenLeafIndices`)에만 엔진 `SetPerParticleCollisionProfileName`으로 `WaxLooseFragment`(PhysicsBody, Pawn·Visibility 무시) 프로필을 입힘. 본체는 컴포넌트 설정을 유지해 공격 판정(Visibility 오버랩)은 그대로. 조각끼리·바닥·벽 충돌과 본체→조각 밀기, 필드 기반 파편 차기(`PhysicsBody` 오브젝트 쿼리)는 유지. 캐릭터 캡슐은 레벨의 다른 물리 소품과의 충돌을 지키기 위해 바꾸지 않음.
+- 몬스터: 캡슐은 이미 `ECC_PhysicsBody` 무시. 버터 눕는 방향 스윕(`ECC_WorldDynamic`)은 `ECC_PhysicsBody`를 무시하도록 바꿈(다른 몬스터는 캡슐로 감지).
+- 튐 제한: 물리 스레드 정리 루프에서 본체 외 활성 파티클에 `SetMaxLinearSpeedSq`/`SetMaxAngularSpeedSq`를 매 틱 기록. 엔진이 적분 단계에서 속도를 자르므로 속도 필드(발차기·걷어차기)와 Kinematic 본체 밀림 모두 다음 스텝부터 상한을 넘지 않음. 기본값 1000cm/s는 의도된 최대 속도(걷기 차기 600×1.35+160≈830, 발차기 파편 600+200≈630, 넉백 본체 900+250≈930cm/s)를 살리고 관통 해소로 튀는 과속만 자르는 선.
+
 ## 10. 리스크
 
 - **FirstPersonScale 0.6**: 다리가 보이면 카메라 쪽으로 축소·왜곡될 수 있음 → H0 결과에 따라 하체 HideBone 또는 FP 스케일 예외 처리 검토.
