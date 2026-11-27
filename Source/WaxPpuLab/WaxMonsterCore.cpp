@@ -82,10 +82,11 @@ void AWaxMonsterCore::InitializeCore(TSubclassOf<AWaxMonsterBase> InMonsterClass
 		FMath::FRandRange(PopMin.Y, PopMax.Y),
 		FMath::FRandRange(PopMin.Z, PopMax.Z));
 	CoreMesh->SetPhysicsLinearVelocity(PopVel);
+	const float MaxAng = CoreData().CorePopMaxAngularSpeedDeg;
 	CoreMesh->SetPhysicsAngularVelocityInDegrees(FVector(
-		FMath::FRandRange(-180.0f, 180.0f),
-		FMath::FRandRange(-180.0f, 180.0f),
-		FMath::FRandRange(-180.0f, 180.0f)));
+		FMath::FRandRange(-MaxAng, MaxAng),
+		FMath::FRandRange(-MaxAng, MaxAng),
+		FMath::FRandRange(-MaxAng, MaxAng)));
 }
 
 void AWaxMonsterCore::HandleCoreHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
@@ -102,14 +103,15 @@ void AWaxMonsterCore::HandleCoreHit(UPrimitiveComponent* HitComp, AActor* OtherA
 	}
 
 	const float Speed = CoreMesh ? CoreMesh->GetPhysicsLinearVelocity().Size() : 0.0f;
-	if (Speed < 45.0f)
+	const UWaxMonsterDataAsset& D = CoreData();
+	if (Speed < D.CoreBounceMinSpeed)
 	{
 		return;
 	}
 
-	const float Vol = FMath::Clamp(Speed / 320.0f, 0.2f, 0.85f);
-	UGameplayStatics::PlaySoundAtLocation(this, MonsterData->CoreBounceSound, Hit.ImpactPoint, Vol, FMath::FRandRange(0.95f, 1.18f));
-	NextAllowedBounceSoundTime = Now + 0.14;
+	const float Vol = FMath::Clamp(Speed / FMath::Max(1.0f, D.CoreBounceVolumeSpeedRef), D.CoreBounceVolumeRange.X, D.CoreBounceVolumeRange.Y);
+	UGameplayStatics::PlaySoundAtLocation(this, D.CoreBounceSound, Hit.ImpactPoint, Vol, FMath::FRandRange(D.CoreBouncePitchRange.X, D.CoreBouncePitchRange.Y));
+	NextAllowedBounceSoundTime = Now + D.CoreBounceCooldownSec;
 }
 
 void AWaxMonsterCore::Tick(float DeltaTime)
@@ -126,7 +128,8 @@ void AWaxMonsterCore::Tick(float DeltaTime)
 	if (CoreState == EWaxCoreState::Falling)
 	{
 		const float Speed = CoreMesh ? CoreMesh->GetPhysicsLinearVelocity().Size() : 0.0f;
-		if (StateElapsed >= 1.2f || (StateElapsed >= 0.35f && Speed < 25.0f))
+		const UWaxMonsterDataAsset& D = CoreData();
+		if (StateElapsed >= D.CoreSettleMaxSec || (StateElapsed >= D.CoreSettleMinSec && Speed < D.CoreSettleSpeedThreshold))
 		{
 			CoreState = EWaxCoreState::Dormant;
 			StateElapsed = 0.0f;
@@ -145,8 +148,9 @@ void AWaxMonsterCore::Tick(float DeltaTime)
 	{
 		const float GrowDur = MonsterData ? FMath::Max(0.1f, MonsterData->ReviveGrowDuration) : 0.85f;
 		const float Alpha = FMath::Clamp(StateElapsed / GrowDur, 0.0f, 1.0f);
-		const float Smooth = FMath::InterpEaseOut(0.08f, 1.0f, Alpha, 2.2f);
-		const float Pulse = 1.0f + 0.05f * FMath::Sin(Alpha * PI * 5.0f) * (1.0f - Alpha);
+		const UWaxMonsterDataAsset& D = CoreData();
+		const float Smooth = FMath::InterpEaseOut(D.ReviveStartScale, 1.0f, Alpha, D.ReviveGrowEaseExp);
+		const float Pulse = 1.0f + D.RevivePulseAmplitude * FMath::Sin(Alpha * PI * D.RevivePulseCycles) * (1.0f - Alpha);
 
 		RevivePreviewMesh->SetWorldScale3D(ReviveTargetScale * Smooth * Pulse);
 
@@ -181,7 +185,7 @@ void AWaxMonsterCore::BeginReviving()
 
 	RevivePreviewMesh->SetWorldLocation(ReviveSpawnLocation);
 	RevivePreviewMesh->SetWorldRotation(FRotator::ZeroRotator);
-	RevivePreviewMesh->SetWorldScale3D(ReviveTargetScale * 0.08f);
+	RevivePreviewMesh->SetWorldScale3D(ReviveTargetScale * CoreData().ReviveStartScale);
 	RevivePreviewMesh->SetVisibility(true);
 
 	BP_OnCoreReviveStarted();
@@ -224,4 +228,9 @@ void AWaxMonsterCore::KillCore_Implementation()
 	CoreState = EWaxCoreState::Dead;
 	OnCorePermanentlyKilled.Broadcast(this);
 	Destroy();
+}
+
+const UWaxMonsterDataAsset& AWaxMonsterCore::CoreData() const
+{
+	return MonsterData ? *MonsterData : *GetDefault<UWaxMonsterDataAsset>();
 }

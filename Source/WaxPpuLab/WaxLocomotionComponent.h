@@ -167,6 +167,9 @@ protected:
 	virtual void OnSuspendEnded() override;
 
 private:
+	/** 버터 텀블 설정 (DA 직접 참조) */
+	const struct FWaxButterLocomotionSettings& ButterSettings() const;
+
 	void EnterState(EWaxButterLocoState NewState);
 	void TickHopAlign(float DeltaTime);
 	void TickLayDown(float DeltaTime);

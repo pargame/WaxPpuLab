@@ -162,7 +162,7 @@ void UWaxRollingLocomotionComponent::TickComponent(float DeltaTime, ELevelTick T
 		if (bWasFalling)
 		{
 			bWasFalling = false;
-			LandingBlendRemaining = 0.2f;
+			LandingBlendRemaining = (MonsterData ? MonsterData : GetDefault<UWaxMonsterDataAsset>())->RollingLandingBlendSec;
 		}
 
 		FVector FloorNormal = FVector::UpVector;
@@ -188,7 +188,7 @@ void UWaxRollingLocomotionComponent::TickComponent(float DeltaTime, ELevelTick T
 		if (LandingBlendRemaining > 0.0f)
 		{
 			LandingBlendRemaining = FMath::Max(0.0f, LandingBlendRemaining - DeltaTime);
-			CurrentAngularVelocity = FMath::VInterpTo(CurrentAngularVelocity, TargetAngVel, DeltaTime, 14.0f);
+			CurrentAngularVelocity = FMath::VInterpTo(CurrentAngularVelocity, TargetAngVel, DeltaTime, (MonsterData ? MonsterData : GetDefault<UWaxMonsterDataAsset>())->RollingLandingInterpSpeed);
 		}
 		else
 		{
@@ -446,7 +446,7 @@ void UWaxButterLocomotionComponent::EnterState(EWaxButterLocoState NewState)
 		CurrentLayAlpha = 1.0f;
 		TumbleStepIndex = 0;
 		TumbleTheta = 0.0f;
-		TumbleOmega = InitialStepOmega * FMath::Max(0.25f, SpeedMultiplier);
+		TumbleOmega = InitialStepOmega * FMath::Max(ButterSettings().MinSpeedScale, SpeedMultiplier);
 		PrevStepForward = 0.0f;
 		PendingSteerYaw = 0.0f;
 	}
@@ -582,7 +582,7 @@ void UWaxButterLocomotionComponent::TickLayDown(float DeltaTime)
 	StateElapsed += DeltaTime;
 	const float RawT = FMath::Clamp(StateElapsed / FMath::Max(0.05f, LayDownDuration), 0.0f, 1.0f);
 	// Gravity-weighted ease-in so the block tips over naturally with weight
-	const float Alpha = FMath::Pow(RawT, 1.65f);
+	const float Alpha = FMath::Pow(RawT, ButterSettings().LayDownEaseExponent);
 	CurrentLayAlpha = Alpha;
 	const float AngleRad = Alpha * (PI * 0.5f);
 
@@ -623,12 +623,13 @@ void UWaxButterLocomotionComponent::TickTumbleCharge(float DeltaTime)
 	const float CornerR = FMath::Sqrt(W0 * W0 + H0 * H0);
 	const float ApexPhi = FMath::Atan2(W0, H0);
 
-	const float SpeedScale = FMath::Max(0.2f, SpeedMultiplier);
+	const FWaxButterLocomotionSettings& BS = ButterSettings();
+	const float SpeedScale = FMath::Max(BS.MinSpeedScale, SpeedMultiplier);
 	const float GravTerm = (0.75f * EffectiveGravity * SpeedScale / FMath::Max(1.0f, CornerR)) * FMath::Sin(TumbleTheta - ApexPhi);
-	const float DriveTerm = (TumbleTheta < ApexPhi) ? (DriveAngularAccel * SpeedScale) : (DriveAngularAccel * 0.25f * SpeedScale);
+	const float DriveTerm = (TumbleTheta < ApexPhi) ? (DriveAngularAccel * SpeedScale) : (DriveAngularAccel * BS.PostApexDriveRatio * SpeedScale);
 	const float AlphaAccel = GravTerm + DriveTerm;
 
-	TumbleOmega = FMath::Max(0.55f * SpeedScale, TumbleOmega + AlphaAccel * DeltaTime);
+	TumbleOmega = FMath::Max(BS.MinTumbleOmega * SpeedScale, TumbleOmega + AlphaAccel * DeltaTime);
 	const float NextTheta = FMath::Min(PI * 0.5f, TumbleTheta + TumbleOmega * DeltaTime);
 
 	const float NextForward = W0 * (1.0f - FMath::Cos(NextTheta)) + H0 * FMath::Sin(NextTheta);
@@ -726,4 +727,9 @@ void UWaxButterLocomotionComponent::TickStandUp(float DeltaTime)
 
 		EnterState(EWaxButterLocoState::HopAlign);
 	}
+}
+
+const FWaxButterLocomotionSettings& UWaxButterLocomotionComponent::ButterSettings() const
+{
+	return (MonsterData ? MonsterData : GetDefault<UWaxMonsterDataAsset>())->ButterLocomotion;
 }

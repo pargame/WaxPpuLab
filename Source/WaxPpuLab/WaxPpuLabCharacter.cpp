@@ -214,7 +214,8 @@ void AWaxPpuLabCharacter::UpdateDebrisKick()
 		return;
 	}
 
-	const FVector KickOrigin = GetActorLocation() + FVector(0.0f, 0.0f, -35.0f);
+	const float KickHeight = (PlayerData ? PlayerData : GetDefault<UWaxPlayerDataAsset>())->DebrisKickHeightOffset;
+	const FVector KickOrigin = GetActorLocation() + FVector(0.0f, 0.0f, KickHeight);
 	const FVector KickVelocity = HorizVel * DebrisKickStrength + FVector(0.0f, 0.0f, DebrisKickUpwardBoost);
 
 	UWaxBreakablePartComponent::KickFragmentsInRadius(GetWorld(), KickOrigin, KickVelocity, DebrisKickRadius, this);
@@ -264,6 +265,34 @@ void AWaxPpuLabCharacter::ApplyPlayerData()
 	DebrisKickStrength = PlayerData->DebrisKickStrength;
 	DebrisKickUpwardBoost = PlayerData->DebrisKickUpwardBoost;
 	DebrisKickMinMoveSpeed = PlayerData->DebrisKickMinMoveSpeed;
+
+	if (FirstPersonCameraComponent)
+	{
+		FirstPersonCameraComponent->FirstPersonFieldOfView = PlayerData->FirstPersonFieldOfView;
+		FirstPersonCameraComponent->FirstPersonScale = PlayerData->FirstPersonScale;
+	}
+	if (UCharacterMovementComponent* Move = GetCharacterMovement())
+	{
+		Move->AirControl = PlayerData->AirControl;
+		Move->BrakingDecelerationFalling = PlayerData->BrakingDecelerationFalling;
+	}
+	ApplyViewPitchLimits();
+}
+
+void AWaxPpuLabCharacter::ApplyViewPitchLimits()
+{
+	const APlayerController* PC = Cast<APlayerController>(GetController());
+	if (PlayerData && PC && PC->PlayerCameraManager)
+	{
+		PC->PlayerCameraManager->ViewPitchMin = PlayerData->ViewPitchMin;
+		PC->PlayerCameraManager->ViewPitchMax = PlayerData->ViewPitchMax;
+	}
+}
+
+void AWaxPpuLabCharacter::NotifyControllerChanged()
+{
+	Super::NotifyControllerChanged();
+	ApplyViewPitchLimits();
 }
 
 void AWaxPpuLabCharacter::SetThirdPersonPreview(bool bEnable)

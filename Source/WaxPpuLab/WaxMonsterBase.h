@@ -108,9 +108,9 @@ private:
 	void StartHitSlowdown();
 	void ApplyKnockbackNow(const FVector& Velocity, float DurationSec);
 	void DrawDebugStatus();
+	void UpdateEyeSupport();
 
 	EWaxMonsterState MonsterState = EWaxMonsterState::Active;
-	FTimerHandle EyeTimeoutHandle;
 	float HitSlowdownRemaining = 0.0f;
 	FVector PendingKnockbackVelocity = FVector::ZeroVector;
 	float PendingKnockbackDuration = 0.0f;

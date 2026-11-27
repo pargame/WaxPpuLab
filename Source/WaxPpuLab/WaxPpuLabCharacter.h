@@ -219,6 +219,8 @@ private:
 	void TryStartCommandLineCapture();
 	void ApplyCameraViewMode();
 	void ApplyPlayerData();
+	void ApplyViewPitchLimits();
+	virtual void NotifyControllerChanged() override;
 	void UpdateFirstPersonCamera(float DeltaTime);
 	void UpdateUpperBodyAimPitch(float DeltaTime);
 	void UpdateDebrisKick();

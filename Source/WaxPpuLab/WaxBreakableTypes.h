@@ -38,6 +38,22 @@ struct FWaxBreakablePartSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Break")
 	FVector2D SubLevelThresholdRatios = FVector2D(0.5f, 0.25f);
 
+	/** 이 부위를 받치는 다른 부위(눈 → 껍질)가 깨져 사라지면 함께 통째로 탈락할지 여부 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Support")
+	bool bDetachWhenSupportLost = true;
+
+	/** 받침으로 볼 범위 (cm, 이 부위 중심 기준). 이 안에 몸에 붙은 받침 조각이 남아 있는지 검사. 키우면 더 넓게 다 깨져야 탈락 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Support", meta = (ClampMin = "0.0", EditCondition = "bDetachWhenSupportLost"))
+	float SupportRadius = 40.0f;
+
+	/** 범위 안 받침 조각이 이 개수 이하로 남으면 탈락. 0이면 하나도 안 남았을 때만, 키우면 더 일찍 탈락 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Support", meta = (ClampMin = "0", EditCondition = "bDetachWhenSupportLost"))
+	int32 SupportMinAttachedCount = 0;
+
+	/** 받침 부위가 마지막으로 깨진 뒤 받침 검사를 계속하는 시간 (초). 깨진 조각이 몸에서 풀려나는 데 몇 프레임 걸리므로 그보다 길게 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Support", meta = (ClampMin = "0.1", EditCondition = "bDetachWhenSupportLost"))
+	float SupportCheckWindowSec = 1.0f;
+
 	/** 타격 판정 여유 반경 (cm). 타격 구와 부위 중심 거리가 타격 반경+이 값보다 멀면 무시. 0이면 거리 검사 안 함 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hit", meta = (ClampMin = "0.0"))
 	float HitAcceptRadius = 0.0f;

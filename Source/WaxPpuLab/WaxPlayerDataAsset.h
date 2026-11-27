@@ -78,4 +78,32 @@ public:
 	/** 파편 걷어차기가 발동되는 최소 수평 이동 속도 (cm/s). 높이면 미세 움직임 무시 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DebrisKick", meta = (ClampMin = "0.0"))
 	float DebrisKickMinMoveSpeed = 25.0f;
+
+	/** 걷어차기 구 중심 높이 (cm, 캡슐 중심 기준). 낮추면 발목 높이 파편만, 올리면 정강이 높이까지 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "DebrisKick")
+	float DebrisKickHeightOffset = -35.0f;
+
+	/** 1인칭 팔·무기 렌더링 시야각 (도). 키우면 팔이 작고 넓게 보임 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|FirstPerson", meta = (ClampMin = "30.0", ClampMax = "120.0"))
+	float FirstPersonFieldOfView = 70.0f;
+
+	/** 1인칭 팔·무기 렌더링 스케일. 낮추면 벽에 덜 파묻힘 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|FirstPerson", meta = (ClampMin = "0.1", ClampMax = "1.0"))
+	float FirstPersonScale = 0.6f;
+
+	/** 내려다볼 수 있는 최대 각도 (도, 음수) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera", meta = (ClampMin = "-89.0", ClampMax = "0.0"))
+	float ViewPitchMin = -70.0f;
+
+	/** 올려다볼 수 있는 최대 각도 (도) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera", meta = (ClampMin = "0.0", ClampMax = "89.0"))
+	float ViewPitchMax = 80.0f;
+
+	/** 공중에서 방향 조작이 먹는 정도 (0~1). 높이면 점프 중 방향 전환이 쉬움 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float AirControl = 0.5f;
+
+	/** 공중에서 입력이 없을 때 수평 감속 (cm/s²). 높이면 공중에서 빨리 멈춤 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement", meta = (ClampMin = "0.0"))
+	float BrakingDecelerationFalling = 1500.0f;
 };

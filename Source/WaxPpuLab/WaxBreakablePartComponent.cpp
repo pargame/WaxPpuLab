@@ -65,6 +65,8 @@ void UWaxBreakablePartComponent::InitializePart(UGeometryCollectionComponent* In
 	BrokenLeafIndices.Reset();
 	LooseProfileAppliedCount = 0;
 	LooseRuleUntil = -1.0f;
+	LastBreakTime = -1.0f;
+	PendingShatterTime = -1.0f;
 	RemovalSeed = static_cast<int32>(GetUniqueID());
 	HitCount = 0;
 	bBroken = false;
@@ -215,6 +217,9 @@ void UWaxBreakablePartComponent::HandleChaosBreakEvent(const FChaosBreakEvent& B
 	{
 		BrokenLeafIndices.Add(BreakEvent.Index);
 	}
+
+	LastBreakTime = GetNow();
+	PendingShatterTime = -1.0f;
 
 	if (!bBroken)
 	{
@@ -407,6 +412,12 @@ void UWaxBreakablePartComponent::TickComponent(float DeltaTime, ELevelTick TickT
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
+	if (PendingShatterTime >= 0.0f && GetNow() >= PendingShatterTime)
+	{
+		PendingShatterTime = -1.0f;
+		ShatterWhole();
+	}
+
 	if (NeedsAnchorRule())
 	{
 		EnforceAnchorRule();
@@ -450,7 +461,7 @@ void UWaxBreakablePartComponent::ApplyLooseFragmentProfile()
 
 bool UWaxBreakablePartComponent::NeedsTick() const
 {
-	return NeedsAnchorRule();
+	return NeedsAnchorRule() || PendingShatterTime >= 0.0f;
 }
 
 void UWaxBreakablePartComponent::RefreshTickEnabled()
@@ -556,6 +567,11 @@ void UWaxBreakablePartComponent::DetachWhole(const FVector& WorldPopVelocity)
 		Collection->ApplyPhysicsField(true, EGeometryCollectionPhysicsTypeEnum::Chaos_LinearVelocity, nullptr, UniformVelocity);
 	}
 
+	// 안 깨진 채 떼어지면 깨짐 이벤트가 없어 엔진 제거 타이머가 돌지 않으므로, 잠시 뒤 산산조각 내 조각별 수명 규칙에 태움
+	if (!bBroken)
+	{
+		PendingShatterTime = GetNow() + FMath::Max(0.01f, GetPartSettings().DetachShatterDelaySec);
+	}
 	ExtendLooseRule();
 	RefreshTickEnabled();
 }
@@ -641,24 +657,6 @@ bool UWaxBreakablePartComponent::ComputeAttachedLowestZ(float& OutLowestZ)
 		return false;
 	}
 
-	// 엔진 동적 상태로 부착 판정: 잎에서 현재 부모를 따라 올라가 처음 만나는 활성 노드(또는 내부 클러스터)가 Kinematic이면 부착.
-	// 떨어졌거나 제거된 조각은 현재 부모가 끊겨 있어 자연스럽게 제외됨
-	auto IsAttached = [&DynamicState, Dyn](int32 Node) -> bool
-	{
-		while (Node != INDEX_NONE)
-		{
-			if (DynamicState.HasInternalClusterParent(Node))
-			{
-				return DynamicState.IsActive(Node) && !DynamicState.HasDynamicInternalClusterParent(Node) && !DynamicState.HasClusterUnionParent(Node);
-			}
-			if (DynamicState.IsActive(Node))
-			{
-				return !DynamicState.IsDynamicOrSleeping(Node);
-			}
-			Node = Dyn->GetParent(Node);
-		}
-		return false;
-	};
 
 	const TSharedPtr<const FGeometryCollection, ESPMode::ThreadSafe> GeomCol = Collection->GetRestCollection()->GetGeometryCollection();
 	if (!GeomCol.IsValid())
@@ -673,7 +671,7 @@ bool UWaxBreakablePartComponent::ComputeAttachedLowestZ(float& OutLowestZ)
 	bool bAny = false;
 	for (const int32 Leaf : LeafNodeIndices)
 	{
-		if (!RestComponentSpace.IsValidIndex(Leaf) || !TransformToGeometry.IsValidIndex(Leaf) || !IsAttached(Leaf))
+		if (!RestComponentSpace.IsValidIndex(Leaf) || !TransformToGeometry.IsValidIndex(Leaf) || !IsLeafAttached(DynamicState, *Dyn, Leaf))
 		{
 			continue;
 		}
@@ -697,4 +695,72 @@ bool UWaxBreakablePartComponent::ComputeAttachedLowestZ(float& OutLowestZ)
 		OutLowestZ = LowestZ;
 	}
 	return bAny;
+}
+
+bool UWaxBreakablePartComponent::IsLeafAttached(const FGeometryCollectionDynamicStateFacade& DynamicState, const FGeometryDynamicCollection& Dyn, int32 Leaf) const
+{
+	// 엔진 동적 상태로 부착 판정: 잎에서 현재 부모를 따라 올라가 처음 만나는 활성 노드(또는 내부 클러스터)가 Kinematic이면 부착.
+	// 떨어졌거나 제거된 조각은 현재 부모가 끊겨 있어 자연스럽게 제외됨
+	int32 Node = Leaf;
+	while (Node != INDEX_NONE)
+	{
+		if (DynamicState.HasInternalClusterParent(Node))
+		{
+			return DynamicState.IsActive(Node) && !DynamicState.HasDynamicInternalClusterParent(Node) && !DynamicState.HasClusterUnionParent(Node);
+		}
+		if (DynamicState.IsActive(Node))
+		{
+			return !DynamicState.IsDynamicOrSleeping(Node);
+		}
+		Node = Dyn.GetParent(Node);
+	}
+	return false;
+}
+
+int32 UWaxBreakablePartComponent::CountAttachedLeavesNear(const FVector& WorldPoint, float Radius)
+{
+	if (!Collection || !Collection->GetRestCollection())
+	{
+		return 0;
+	}
+	if (!bBroken)
+	{
+		return INDEX_NONE;
+	}
+	if (bDetached || bReleased || !Collection->IsVisible())
+	{
+		return 0;
+	}
+
+	FGeometryDynamicCollection* Dyn = Collection->GetDynamicCollection();
+	const TSharedPtr<const FGeometryCollection, ESPMode::ThreadSafe> GeomCol = Collection->GetRestCollection()->GetGeometryCollection();
+	if (!Dyn || !GeomCol.IsValid() || RestComponentSpace.Num() != Dyn->GetNumTransforms())
+	{
+		return INDEX_NONE;
+	}
+	const FGeometryCollectionDynamicStateFacade DynamicState(*Dyn);
+	if (!DynamicState.IsValid())
+	{
+		return INDEX_NONE;
+	}
+
+	const TManagedArray<int32>& TransformToGeometry = GeomCol->TransformToGeometryIndex;
+	const TManagedArray<FBox>& LocalBoxes = GeomCol->BoundingBox;
+	// 기준점을 컴포넌트 공간으로 한 번 옮기고, 잎마다 자기 로컬 박스까지의 거리로 판정 (큰 조각이 중심은 멀어도 눈 뒤를 받치는 경우 포함)
+	const FVector ComponentPoint = Collection->GetComponentTransform().InverseTransformPosition(WorldPoint);
+	const float RadiusSq = FMath::Square(Radius);
+	int32 Count = 0;
+	for (const int32 Leaf : LeafNodeIndices)
+	{
+		if (!RestComponentSpace.IsValidIndex(Leaf) || !TransformToGeometry.IsValidIndex(Leaf) || !LocalBoxes.IsValidIndex(TransformToGeometry[Leaf]))
+		{
+			continue;
+		}
+		const FVector LeafLocalPoint = FTransform(RestComponentSpace[Leaf]).InverseTransformPosition(ComponentPoint);
+		if (LocalBoxes[TransformToGeometry[Leaf]].ComputeSquaredDistanceToPoint(LeafLocalPoint) <= RadiusSq && IsLeafAttached(DynamicState, *Dyn, Leaf))
+		{
+			++Count;
+		}
+	}
+	return Count;
 }

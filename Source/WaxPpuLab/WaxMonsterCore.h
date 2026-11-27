@@ -56,6 +56,7 @@ protected:
 	void BP_OnCoreRevived(AWaxMonsterBase* RevivedMonster);
 
 private:
+	const UWaxMonsterDataAsset& CoreData() const;
 	UFUNCTION()
 	void HandleCoreHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
 

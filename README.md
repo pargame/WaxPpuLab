@@ -113,6 +113,11 @@ Unreal Engine 5.9 (macOS Apple Silicon) Chaos Destruction + 물리 기반 ASMR �
 | 껍질이 얼마나 단단한가 | GC 에셋 `DamageThreshold`(1·2·3단계, 현재 250000/150000/50000) 또는 몬스터 DA `ShellPart.DamageThreshold`(0이면 에셋 값), 부위별 `HardnessZones` |
 | 눈이 얼마나 단단한가·탈락 연출 | 몬스터 DA → `Eyes.EyePart` |
 | 깨진 볼이 공중에 뜨지 않고 바닥에 닿아 구르기 | 몬스터 DA → `Movement|GroundContact` → `bKeepBrokenBodyOnGround`, `GroundContactInterpSpeed`(들썩임 빠르기), `GroundContactMaxDrop`(최대 내림 cm). 몸에 붙은 껍질 조각·코어의 최저점을 매 프레임 계산해 보이는 몸(`BodyPivot`)만 내리며, 캡슐·이동은 그대로 |
+| 눈 받침 껍질이 떨어지면 눈도 탈락 | 몬스터 DA → `EyePart` → `Support`: `bDetachWhenSupportLost`(유무), `SupportRadius`(40cm), `SupportMinAttachedCount`(0), `SupportCheckWindowSec`(1.0s). 안 깨진 채 떨어진 눈은 `DetachShatterDelaySec` 뒤 산산조각 → 조각별 수명 |
+| 볼 착지 직후 구르기 | 몬스터 DA → `Movement|Rolling`: `RollingLandingBlendSec`, `RollingLandingInterpSpeed` |
+| 버터 텀블 세부 | 몬스터 DA → `ButterLocomotion`: `LayDownEaseExponent`, `MinSpeedScale`, `PostApexDriveRatio`, `MinTumbleOmega` |
+| 코어 튐·바운스음·정착·부활 연출 | 몬스터 DA → `Core`(`CorePopMaxAngularSpeedDeg`), `Core|BounceAudio`, `Core|Settle`, `Core|Revive` |
+| 1인칭 팔 시야·스케일, 시점 상하 한계, 공중 조작 | `DA_WaxPlayer` → `Camera|FirstPerson`, `Camera`(`ViewPitchMin/Max`), `Movement`(`AirControl`, `BrakingDecelerationFalling`), `DebrisKick`(`DebrisKickHeightOffset`) |
 | 몇 % 깨지면 전체 붕괴 | 몬스터 DA → `Destruction.CollapseRemainingRatio` |
 | 깨짐·충돌 소리 | 몬스터 DA → `Audio`, `DestructionAudio`(`CrackSynth` 포함) |
 | 깨진 조각이 사라지는 시간·줄어드는 속도 | 몬스터 DA → `ShellPart`/`EyePart` → `FragmentLifeSecRange`, `FragmentShrinkSecRange`, `ClusterCrumbleDelaySec` |

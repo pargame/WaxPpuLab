@@ -214,7 +214,7 @@ int32 AWaxMonsterBase::GetIntactEyeCount() const
 	int32 Count = 0;
 	for (const UWaxBreakablePartComponent* EyePart : { EyeLeftPart.Get(), EyeRightPart.Get() })
 	{
-		if (EyePart && EyePart->GetCollection() && !EyePart->IsBroken())
+		if (EyePart && EyePart->GetCollection() && !EyePart->IsBroken() && !EyePart->IsDetached())
 		{
 			++Count;
 		}
@@ -237,6 +237,8 @@ void AWaxMonsterBase::Tick(float DeltaTime)
 	{
 		return;
 	}
+
+	UpdateEyeSupport();
 
 	if (bHasPendingKnockback && GFrameCounter >= PendingKnockbackFrame)
 	{
@@ -424,28 +426,13 @@ void AWaxMonsterBase::HandleWaxCollapsed(AActor* CollapsedActor)
 
 	SetActorTickEnabled(false);
 
-	bool bAnyEyeIntact = false;
+	// 안 깨진 눈은 떼어 낸 뒤 부위 컴포넌트가 DetachShatterDelaySec 뒤 산산조각 냄
 	for (UWaxBreakablePartComponent* EyePart : { EyeLeftPart.Get(), EyeRightPart.Get() })
 	{
 		if (EyePart)
 		{
 			EyePart->DetachWhole(EyePart->ComputeDetachPopVelocity(HorizontalFwd));
-			bAnyEyeIntact |= !EyePart->IsBroken();
 		}
-	}
-
-	if (GetWorld() && bAnyEyeIntact)
-	{
-		GetWorld()->GetTimerManager().SetTimer(EyeTimeoutHandle, [this]()
-		{
-			for (UWaxBreakablePartComponent* EyePart : { EyeLeftPart.Get(), EyeRightPart.Get() })
-			{
-				if (EyePart)
-				{
-					EyePart->ShatterWhole();
-				}
-			}
-		}, FMath::Max(0.01f, GetMonsterData().EyePart.DetachShatterDelaySec), false);
 	}
 
 	AWaxMonsterCore* SpawnedCore = nullptr;
@@ -552,4 +539,39 @@ bool AWaxMonsterBase::GetAttachedBodyLowestZ(float& OutLowestZ) const
 	}
 	OutLowestZ = Lowest;
 	return true;
+}
+
+void AWaxMonsterBase::UpdateEyeSupport()
+{
+	// 눈을 받치는 껍질 조각이 모두 떨어져 나가면 눈도 통째로 탈락 (껍질이 깨진 뒤에만 검사)
+	if (!WaxDestructible || !WaxDestructible->IsBroken() || !GetWorld())
+	{
+		return;
+	}
+	const float SinceShellBreak = GetWorld()->GetTimeSeconds() - WaxDestructible->GetLastBreakTime();
+	for (UWaxBreakablePartComponent* EyePart : { EyeLeftPart.Get(), EyeRightPart.Get() })
+	{
+		if (!EyePart || !EyePart->GetCollection() || EyePart->IsDetached() || EyePart->IsReleased() || !EyePart->GetCollection()->IsVisible())
+		{
+			continue;
+		}
+		// 껍질이 마지막으로 깨진 뒤 일정 시간 안에서만 검사 (그 밖에서는 받침 상태가 바뀌지 않음)
+		const FWaxBreakablePartSettings& S = EyePart->GetPartSettings();
+		if (!S.bDetachWhenSupportLost || SinceShellBreak > S.SupportCheckWindowSec)
+		{
+			continue;
+		}
+		const FVector EyeLocation = EyePart->GetCollection()->GetComponentLocation();
+		const int32 Attached = WaxDestructible->CountAttachedLeavesNear(EyeLocation, S.SupportRadius);
+		if (Attached != INDEX_NONE && Attached <= S.SupportMinAttachedCount)
+		{
+			// 몸이 구르며 액터 앞 방향과 눈 방향이 달라지므로 눈의 바깥 방향으로 튀어나감
+			FVector Outward = (EyeLocation - GetActorLocation()).GetSafeNormal2D();
+			if (Outward.IsNearlyZero())
+			{
+				Outward = GetActorForwardVector();
+			}
+			EyePart->DetachWhole(EyePart->ComputeDetachPopVelocity(Outward));
+		}
+	}
 }

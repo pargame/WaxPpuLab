@@ -76,7 +76,13 @@ public:
 	/** 몸에 붙어 있는 조각들의 가장 낮은 월드 Z. 아직 안 깨졌거나 떼어 냄·붕괴 뒤면 false */
 	bool ComputeAttachedLowestZ(float& OutLowestZ);
 
+	/** 반경 안에 몸에 붙어 있는 조각 수. 아직 안 깨졌으면 INDEX_NONE(검사 불필요), 떼어 냄·붕괴 뒤면 0 */
+	int32 CountAttachedLeavesNear(const FVector& WorldPoint, float Radius);
+
 	bool IsReleased() const { return bReleased; }
+
+	/** 마지막 깨짐 이벤트 시각 (초). 깨진 적 없으면 음수 */
+	float GetLastBreakTime() const { return LastBreakTime; }
 	UGeometryCollectionComponent* GetCollection() const { return Collection; }
 	const FWaxBreakablePartSettings& GetPartSettings() const;
 
@@ -113,6 +119,7 @@ private:
 	void ExtendLooseRule();
 	void EnforceAnchorRule();
 	void SyncFragmentRemovalTimers();
+	bool IsLeafAttached(const class FGeometryCollectionDynamicStateFacade& DynamicState, const class FGeometryDynamicCollection& Dyn, int32 Leaf) const;
 	void ApplyLooseFragmentProfile();
 	void PlayPartSound(USoundBase* Sound, const FVector& Location, float Volume, const FVector2D& PitchRange) const;
 
@@ -141,6 +148,9 @@ private:
 
 	/** 떼어 냄·전체 붕괴 이후 Kinematic 정리 규칙을 계속 적용할 마감 시각 (모든 조각 수명이 끝날 때까지) */
 	float LooseRuleUntil = -1.0f;
+	float LastBreakTime = -1.0f;
+	/** 안 깨진 채 떼어진 부위를 산산조각 낼 시각. 음수면 예약 없음 */
+	float PendingShatterTime = -1.0f;
 
 	/** 에셋 기준 조각별 컴포넌트 공간 자세. 몸에 붙은 조각의 현재 위치 계산에 사용 */
 	TArray<FTransform3f> RestComponentSpace;

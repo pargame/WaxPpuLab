@@ -240,6 +240,10 @@ struct FWaxButterLocomotionSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LayDown", meta = (ClampMin = "0.1"))
 	float LayDownDuration = 0.42f;
 
+	/** 눕는 동작의 가속 곡선 지수. 1이면 일정한 속도, 키우면 처음엔 천천히 기울다 무게로 털썩 넘어감 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LayDown", meta = (ClampMin = "0.5", ClampMax = "4.0"))
+	float LayDownEaseExponent = 1.65f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LayDown", meta = (ClampMin = "0.1"))
 	float StandUpDuration = 0.45f;
 
@@ -254,6 +258,18 @@ struct FWaxButterLocomotionSettings
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tumble", meta = (ClampMin = "0.1", ClampMax = "1.0"))
 	float StepBounceRetention = 0.78f;
+
+	/** 맞아서 느려질 때 텀블 속도 배율의 하한. 낮추면 맞았을 때 더 많이 멈칫함 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tumble", meta = (ClampMin = "0.05", ClampMax = "1.0"))
+	float MinSpeedScale = 0.25f;
+
+	/** 모서리를 넘어간 뒤(정점 이후) 구동 가속 비율 (정점 전 대비). 높이면 넘어가는 동작이 빨라짐 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tumble", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float PostApexDriveRatio = 0.25f;
+
+	/** 텀블 최소 각속도 (rad/s, 속도 배율 적용 전). 높이면 모서리에서 머뭇거리지 않음 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tumble", meta = (ClampMin = "0.05"))
+	float MinTumbleOmega = 0.55f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tumble", meta = (ClampMin = "1"))
 	int32 MaxTumbleSteps = 10;
@@ -316,6 +332,14 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement", meta = (ClampMin = "10.0"))
 	float RollRadius = 92.5f;
+
+	/** 공중에서 착지한 직후 구르기 회전을 실제 이동에 맞춰 섞는 시간 (초). 늘리면 착지 후 회전이 부드럽게 따라붙음 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement|Rolling", meta = (ClampMin = "0.0"))
+	float RollingLandingBlendSec = 0.2f;
+
+	/** 착지 블렌드 동안 회전 속도를 따라가는 빠르기. 낮추면 착지 후 미끄러지듯 구름 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement|Rolling", meta = (ClampMin = "0.1"))
+	float RollingLandingInterpSpeed = 14.0f;
 
 	/** 껍질이 깨져 아랫부분이 비면 남은 몸의 가장 낮은 점이 바닥에 닿도록 보이는 몸을 내림 (구르는 볼 전용). 끄면 깨져도 원래 높이 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement|GroundContact")
@@ -405,6 +429,58 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Core")
 	TObjectPtr<USoundBase> CoreBounceSound = nullptr;
+
+	/** 코어가 튀어나올 때 무작위 회전 속도의 최대치 (도/s). 높이면 더 팽글팽글 돔 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Core", meta = (ClampMin = "0.0"))
+	float CorePopMaxAngularSpeedDeg = 180.0f;
+
+	/** 바운스 소리가 나는 최소 속도 (cm/s). 높이면 약한 굴림에는 소리 안 남 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Core|BounceAudio", meta = (ClampMin = "0.0"))
+	float CoreBounceMinSpeed = 45.0f;
+
+	/** 바운스 소리 볼륨이 최대가 되는 기준 속도 (cm/s). 낮추면 작은 충돌도 크게 들림 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Core|BounceAudio", meta = (ClampMin = "1.0"))
+	float CoreBounceVolumeSpeedRef = 320.0f;
+
+	/** 바운스 소리 볼륨 범위 (최소, 최대) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Core|BounceAudio")
+	FVector2D CoreBounceVolumeRange = FVector2D(0.2f, 0.85f);
+
+	/** 바운스 소리 피치 무작위 범위 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Core|BounceAudio")
+	FVector2D CoreBouncePitchRange = FVector2D(0.95f, 1.18f);
+
+	/** 바운스 소리 최소 간격 (초). 늘리면 연속 충돌음이 줄어듦 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Core|BounceAudio", meta = (ClampMin = "0.0"))
+	float CoreBounceCooldownSec = 0.14f;
+
+	/** 떨어진 코어가 멈춘 것으로 보기까지 최대 시간 (초). 지나면 속도와 무관하게 휴면 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Core|Settle", meta = (ClampMin = "0.0"))
+	float CoreSettleMaxSec = 1.2f;
+
+	/** 이 시간이 지난 뒤부터 속도로 정착 판정 (초) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Core|Settle", meta = (ClampMin = "0.0"))
+	float CoreSettleMinSec = 0.35f;
+
+	/** 이 속도 아래면 정착한 것으로 봄 (cm/s) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Core|Settle", meta = (ClampMin = "0.0"))
+	float CoreSettleSpeedThreshold = 25.0f;
+
+	/** 부활 미리보기가 자라기 시작하는 크기 (최종 대비 비율) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Core|Revive", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float ReviveStartScale = 0.08f;
+
+	/** 부활 성장 감속 곡선 지수. 키우면 처음에 빨리 커지고 끝에서 천천히 멈춤 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Core|Revive", meta = (ClampMin = "1.0"))
+	float ReviveGrowEaseExp = 2.2f;
+
+	/** 부활 중 맥동 진폭 (크기 비율). 0이면 맥동 없음 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Core|Revive", meta = (ClampMin = "0.0"))
+	float RevivePulseAmplitude = 0.05f;
+
+	/** 부활 동안 맥동 횟수 (반주기 단위). 키우면 더 자주 꿈틀거림 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Core|Revive", meta = (ClampMin = "0.0"))
+	float RevivePulseCycles = 5.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Eyes")
 	TObjectPtr<UGeometryCollection> EyeCollectionAsset = nullptr;
