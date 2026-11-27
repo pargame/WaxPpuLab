@@ -6,6 +6,7 @@
 #include "Engine/World.h"
 #include "Field/FieldSystemObjects.h"
 #include "GeometryCollection/GeometryCollection.h"
+#include "GeometryCollection/GeometryCollectionAlgo.h"
 #include "GeometryCollection/Facades/CollectionRemoveOnBreakFacade.h"
 #include "GeometryCollection/GeometryCollectionComponent.h"
 #include "GeometryCollection/GeometryCollectionEngineRemoval.h"
@@ -140,6 +141,16 @@ void UWaxBreakablePartComponent::BuildLeafCache()
 			LeafNodeIndices.Add(i);
 		}
 	}
+
+	// 몸에 붙은 조각의 자세는 에셋 기준 자세 그대로이므로 에셋에서 한 번 계산 (런타임 값은 물리 결과가 한 프레임 늦어 구르는 중에 어긋남)
+	TArray<int32> AllIndices;
+	AllIndices.Reserve(NumTransforms);
+	for (int32 i = 0; i < NumTransforms; ++i)
+	{
+		AllIndices.Add(i);
+	}
+	RestComponentSpace.Reset();
+	GeometryCollectionAlgo::GlobalMatrices(GeomCol->Transform, GeomCol->Parent, AllIndices, RestComponentSpace);
 }
 
 void UWaxBreakablePartComponent::EnsureFieldNodes()
@@ -618,17 +629,36 @@ bool UWaxBreakablePartComponent::ComputeAttachedLowestZ(float& OutLowestZ)
 		return false;
 	}
 
-	const TArray<FTransform3f>& Current = Collection->GetComponentSpaceTransforms3f();
-	if (!bBroken)
-	{
-		// 안 깨진 동안 기준 자세를 갱신하고, 최저점은 계산하지 않음 (온전한 구는 캡슐 바닥에 닿아 있음)
-		RestComponentSpace = Current;
-		return false;
-	}
-	if (RestComponentSpace.Num() != Current.Num())
+	// 안 깨진 동안은 계산하지 않음 (온전한 구는 캡슐 바닥에 닿아 있음)
+	FGeometryDynamicCollection* Dyn = Collection->GetDynamicCollection();
+	if (!bBroken || !Dyn || RestComponentSpace.Num() != Dyn->GetNumTransforms())
 	{
 		return false;
 	}
+	const FGeometryCollectionDynamicStateFacade DynamicState(*Dyn);
+	if (!DynamicState.IsValid())
+	{
+		return false;
+	}
+
+	// 엔진 동적 상태로 부착 판정: 잎에서 현재 부모를 따라 올라가 처음 만나는 활성 노드(또는 내부 클러스터)가 Kinematic이면 부착.
+	// 떨어졌거나 제거된 조각은 현재 부모가 끊겨 있어 자연스럽게 제외됨
+	auto IsAttached = [&DynamicState, Dyn](int32 Node) -> bool
+	{
+		while (Node != INDEX_NONE)
+		{
+			if (DynamicState.HasInternalClusterParent(Node))
+			{
+				return DynamicState.IsActive(Node) && !DynamicState.HasDynamicInternalClusterParent(Node) && !DynamicState.HasClusterUnionParent(Node);
+			}
+			if (DynamicState.IsActive(Node))
+			{
+				return !DynamicState.IsDynamicOrSleeping(Node);
+			}
+			Node = Dyn->GetParent(Node);
+		}
+		return false;
+	};
 
 	const TSharedPtr<const FGeometryCollection, ESPMode::ThreadSafe> GeomCol = Collection->GetRestCollection()->GetGeometryCollection();
 	if (!GeomCol.IsValid())
@@ -643,13 +673,7 @@ bool UWaxBreakablePartComponent::ComputeAttachedLowestZ(float& OutLowestZ)
 	bool bAny = false;
 	for (const int32 Leaf : LeafNodeIndices)
 	{
-		if (!Current.IsValidIndex(Leaf) || !TransformToGeometry.IsValidIndex(Leaf))
-		{
-			continue;
-		}
-		// 몸에 붙은 조각은 깨지기 전 자세 그대로, 떨어진 조각은 위치가 달라지고 축소 중이면 스케일이 줄어듦
-		const FTransform3f& Now = Current[Leaf];
-		if (!Now.GetTranslation().Equals(RestComponentSpace[Leaf].GetTranslation(), 1.0f) || Now.GetScale3D().X < 0.99f)
+		if (!RestComponentSpace.IsValidIndex(Leaf) || !TransformToGeometry.IsValidIndex(Leaf) || !IsAttached(Leaf))
 		{
 			continue;
 		}
@@ -659,7 +683,7 @@ bool UWaxBreakablePartComponent::ComputeAttachedLowestZ(float& OutLowestZ)
 			continue;
 		}
 		const FBox& Box = LocalBoxes[GeometryIndex];
-		const FTransform LeafToWorld = FTransform(Now) * ComponentToWorld;
+		const FTransform LeafToWorld = FTransform(RestComponentSpace[Leaf]) * ComponentToWorld;
 		for (int32 Corner = 0; Corner < 8; ++Corner)
 		{
 			const FVector Local((Corner & 1) ? Box.Max.X : Box.Min.X, (Corner & 2) ? Box.Max.Y : Box.Min.Y, (Corner & 4) ? Box.Max.Z : Box.Min.Z);

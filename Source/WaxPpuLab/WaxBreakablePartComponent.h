@@ -142,7 +142,7 @@ private:
 	/** 떼어 냄·전체 붕괴 이후 Kinematic 정리 규칙을 계속 적용할 마감 시각 (모든 조각 수명이 끝날 때까지) */
 	float LooseRuleUntil = -1.0f;
 
-	/** 깨지기 전 조각별 컴포넌트 공간 위치. 이 위치에 그대로 있는 조각을 몸에 붙은 조각으로 판정 */
+	/** 에셋 기준 조각별 컴포넌트 공간 자세. 몸에 붙은 조각의 현재 위치 계산에 사용 */
 	TArray<FTransform3f> RestComponentSpace;
 	int32 RemovalSeed = 0;
 	/** 떨어진 조각 충돌 프로필을 적용한 조각 수 (새 조각이 생겼을 때만 다시 적용) */
